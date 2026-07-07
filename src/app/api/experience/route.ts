@@ -29,12 +29,29 @@ export async function POST(req: NextRequest) {
   }
 }
 
+const DUCK_URL = "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Duck/glTF-Binary/Duck.glb";
+
 // GET /api/experience?slug=xxx — fetch config
 export async function GET(req: NextRequest) {
   const slug = req.nextUrl.searchParams.get("slug");
   if (!slug) return NextResponse.json({ error: "slug required" }, { status: 400 });
 
-  const config = getExperience(slug);
+  let config = getExperience(slug);
+
+  // Seed a default demo experience so /ar/untitled-experience always works
+  if (!config && slug === "untitled-experience") {
+    config = {
+      slug: "untitled-experience",
+      name: "Demo — Duck on Hiro",
+      modelUrl: DUCK_URL,
+      markerUrl: null,   // null = use Hiro marker
+      scale: 1,
+      animation: "spin",
+      createdAt: new Date().toISOString(),
+    };
+    saveExperience(config);
+  }
+
   if (!config) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   return NextResponse.json(config);
