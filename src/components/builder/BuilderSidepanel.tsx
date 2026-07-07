@@ -45,14 +45,15 @@ export default function BuilderSidepanel({ slug: _slug }: { slug: string }) {
     scale, setScale,
     animation, setAnimation,
     modelUrl, modelName, setModel, setModelFromUrl, clearModel,
-    markerUrl, setMarker, clearMarker,
+    markerUrl, markerMindUrl, setMarker, setMarkerMindUrl, clearMarker,
     isPublished, publishedSlug,
     baseUrl, setBaseUrl,
   } = useBuilderStore();
 
   const markerInputRef = useRef<HTMLInputElement>(null);
   const modelInputRef  = useRef<HTMLInputElement>(null);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied]           = useState(false);
+  const [compilingMarker, setCompilingMarker] = useState(false);
 
   const effectiveBase = baseUrl.trim() || (typeof window !== "undefined" ? window.location.origin : "");
   const shareUrl = publishedSlug && effectiveBase ? `${effectiveBase}/ar/${publishedSlug}` : null;
@@ -65,11 +66,54 @@ export default function BuilderSidepanel({ slug: _slug }: { slug: string }) {
     toast.success("Link copied!");
   };
 
-  const handleMarkerUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleMarkerUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setMarker(file);
-    toast.success("Marker image set!");
+    setCompilingMarker(true);
+    toast.loading("Compiling marker…", { id: "marker" });
+
+    try {
+      // Load MindAR compiler from CDN (WASM, runs in browser)
+      if (!(window as any).MINDAR) {
+        await new Promise<void>((resolve, reject) => {
+          const s = document.createElement("script");
+          s.src = "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js";
+          s.onload = () => resolve();
+          s.onerror = () => reject(new Error("Failed to load MindAR compiler"));
+          document.head.appendChild(s);
+        });
+      }
+
+      // Convert file to ImageData
+      const bitmap = await createImageBitmap(file);
+      const canvas = document.createElement("canvas");
+      canvas.width  = bitmap.width;
+      canvas.height = bitmap.height;
+      const ctx = canvas.getContext("2d")!;
+      ctx.drawImage(bitmap, 0, 0);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+      // Compile using MindAR
+      const compiler = new (window as any).MINDAR.IMAGE.Compiler();
+      await compiler.compileImageTargets([imageData], () => {});
+      const buffer: ArrayBuffer = await compiler.exportData();
+
+      // Upload .mind file to server → Supabase Storage
+      const fd = new FormData();
+      fd.append("mind", new File([buffer], "marker.mind", { type: "application/octet-stream" }));
+      const res = await fetch("/api/upload-mind", { method: "POST", body: fd });
+      if (!res.ok) throw new Error("Upload failed");
+      const { url } = await res.json();
+
+      setMarkerMindUrl(url);
+      toast.success("Marker ready!", { id: "marker", description: "Image compiled and uploaded" });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Marker compile failed", { id: "marker" });
+      clearMarker();
+    } finally {
+      setCompilingMarker(false);
+    }
   };
 
   const handleModelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -209,35 +253,48 @@ export default function BuilderSidepanel({ slug: _slug }: { slug: string }) {
                 Marker image
               </Label>
               <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
-                Upload any image. The phone camera will detect it and place your 3D model on top.
+                Upload any photo or image. We compile it into an AR tracking target automatically.
               </p>
-              <input ref={markerInputRef} type="file" accept="image/*" className="hidden" onChange={handleMarkerUpload} />
+              <input ref={markerInputRef} type="file" accept="image/*" className="hidden" onChange={handleMarkerUpload} disabled={compilingMarker} />
               <button
-                onClick={() => markerInputRef.current?.click()}
-                className="w-full border-2 border-dashed border-border rounded-xl overflow-hidden hover:border-[var(--brand)] transition-colors group"
+                onClick={() => !compilingMarker && markerInputRef.current?.click()}
+                disabled={compilingMarker}
+                className="w-full border-2 border-dashed border-border rounded-xl overflow-hidden hover:border-[var(--brand)] transition-colors group disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                {markerUrl
+                {compilingMarker ? (
+                  <div className="p-6 flex flex-col items-center gap-2">
+                    <Loader2 className="w-6 h-6 animate-spin text-[var(--brand)]" />
+                    <p className="text-xs text-muted-foreground">Compiling marker…</p>
+                    <p className="text-[10px] text-muted-foreground">This takes 5–15 seconds</p>
+                  </div>
+                ) : markerUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  ? <img src={markerUrl} alt="Marker preview" className="w-full h-36 object-cover" />
-                  : (
-                    <div className="p-5 text-center">
-                      <Scan className="w-6 h-6 mx-auto text-muted-foreground group-hover:text-[var(--brand)] mb-2 transition-colors" />
-                      <p className="text-xs text-muted-foreground group-hover:text-foreground">
-                        Upload marker image<br />JPG · PNG · WebP
-                      </p>
-                    </div>
-                  )
-                }
+                  <img src={markerUrl} alt="Marker preview" className="w-full h-36 object-cover" />
+                ) : (
+                  <div className="p-5 text-center">
+                    <Scan className="w-6 h-6 mx-auto text-muted-foreground group-hover:text-[var(--brand)] mb-2 transition-colors" />
+                    <p className="text-xs text-muted-foreground group-hover:text-foreground">
+                      Upload any image<br />JPG · PNG · WebP
+                    </p>
+                  </div>
+                )}
               </button>
 
-              {markerUrl && (
+              {markerUrl && !compilingMarker && (
                 <div className="flex gap-2 mt-2">
-                  <div className="flex items-center gap-1.5 flex-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5">
-                    <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-                    <span className="text-xs text-emerald-600 font-medium">Marker set</span>
+                  <div className={cn(
+                    "flex items-center gap-1.5 flex-1 rounded-lg px-3 py-1.5 border",
+                    markerMindUrl
+                      ? "bg-emerald-500/10 border-emerald-500/20"
+                      : "bg-amber-500/10 border-amber-500/20"
+                  )}>
+                    <div className={cn("w-2 h-2 rounded-full shrink-0", markerMindUrl ? "bg-emerald-500" : "bg-amber-500")} />
+                    <span className={cn("text-xs font-medium", markerMindUrl ? "text-emerald-600" : "text-amber-600")}>
+                      {markerMindUrl ? "Marker compiled ✓" : "Compiling…"}
+                    </span>
                   </div>
                   <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => markerInputRef.current?.click()}>Change</Button>
-                  <Button variant="ghost" size="sm" className="text-xs h-8 text-destructive hover:text-destructive" onClick={clearMarker}>Remove</Button>
+                  <Button variant="ghost" size="sm" className="text-xs h-8 text-destructive hover:text-destructive" onClick={clearMarker}>✕</Button>
                 </div>
               )}
             </div>
@@ -248,17 +305,17 @@ export default function BuilderSidepanel({ slug: _slug }: { slug: string }) {
               <p className="text-xs font-semibold text-foreground">Tips for best tracking</p>
               <ul className="text-xs text-muted-foreground space-y-1.5">
                 <li>• High contrast, lots of unique detail</li>
-                <li>• Avoid plain colors or gradients</li>
-                <li>• Min 300×300px image size</li>
+                <li>• Avoid plain colors or solid backgrounds</li>
+                <li>• Minimum 300×300px image</li>
                 <li>• Good lighting when scanning</li>
               </ul>
             </div>
 
             {!markerUrl && (
               <div className="rounded-xl bg-blue-500/10 border border-blue-500/20 p-3">
-                <p className="text-xs text-blue-600 font-medium mb-1">No marker? Use Hiro</p>
+                <p className="text-xs text-blue-600 font-medium mb-1">Skip — use Hiro marker</p>
                 <p className="text-xs text-blue-600/80 mb-2">
-                  Skip the marker — the AR viewer will use the standard Hiro marker instead. Print it from below.
+                  Don&apos;t have a custom image? Use the standard Hiro marker instead.
                 </p>
                 <a
                   href="https://raw.githubusercontent.com/AR-js-org/AR.js/master/data/images/hiro.png"

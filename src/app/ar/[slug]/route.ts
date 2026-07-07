@@ -65,6 +65,8 @@ export async function GET(
   }
 
   const s = scale;
+  const isMind = markerUrl?.endsWith(".mind") ?? false;
+
   const animAttr = animation === "spin"
     ? `property: rotation; to: 0 360 0; loop: true; dur: 3000; easing: linear`
     : animation === "float"
@@ -73,6 +75,101 @@ export async function GET(
     ? `property: scale; from: ${s*0.9} ${s*0.9} ${s*0.9}; to: ${s*1.1} ${s*1.1} ${s*1.1}; dir: alternate; loop: true; dur: 900`
     : "";
   const animTag = animAttr ? `animation="${animAttr}"` : "";
+
+  // Use MindAR for .mind files, AR.js for Hiro
+  const html = isMind
+    ? buildMindARHtml({ name, modelUrl, markerUrl: markerUrl!, scale, animTag })
+    : buildARJsHtml({ name, modelUrl, scale: s, animTag });
+
+  return new NextResponse(html, {
+    status: 200,
+    headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+  });
+}
+
+function buildMindARHtml({ name, modelUrl, markerUrl, scale, animTag }: {
+  name: string; modelUrl: string; markerUrl: string; scale: number; animTag: string;
+}) {
+  const s = scale;
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
+  <title>${name} · ARweave</title>
+  <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+  <style>
+    body { margin: 0; overflow: hidden; }
+    #hud {
+      position:fixed; top:0; left:0; right:0; z-index:9999;
+      pointer-events:none; padding:10px 14px;
+      background:linear-gradient(to bottom,rgba(0,0,0,0.6),transparent);
+      display:flex; align-items:center; justify-content:space-between;
+      font-family:-apple-system,sans-serif;
+    }
+    .left{display:flex;align-items:center;gap:8px;}
+    .dot{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,#7c3aed,#a855f7);display:flex;align-items:center;justify-content:center;font-size:12px;}
+    .nm{color:#fff;font-size:13px;font-weight:700;}
+    #hint{font-family:-apple-system,sans-serif;font-size:11px;font-weight:600;color:#fff;background:rgba(255,255,255,0.18);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-radius:20px;padding:4px 12px;transition:background 0.3s;}
+    #hint.found{background:rgba(5,150,105,0.85);}
+    #bar{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:9999;font-family:-apple-system,sans-serif;font-size:11px;color:rgba(255,255,255,0.85);background:rgba(0,0,0,0.55);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-radius:20px;padding:5px 14px;white-space:nowrap;}
+  </style>
+</head>
+<body>
+  <div id="hud">
+    <div class="left"><div class="dot">⬡</div><span class="nm">${name}</span></div>
+    <div id="hint">Point at your image</div>
+  </div>
+  <div id="bar">Loading…</div>
+
+  <a-scene
+    mindar-image="imageTargetSrc: ${markerUrl}; autoStart: true;"
+    color-space="sRGB"
+    renderer="colorManagement: true; physicallyCorrectLights: true;"
+    vr-mode-ui="enabled: false"
+    device-orientation-permission-ui="enabled: false"
+  >
+    <a-assets>
+      <a-asset-item id="model" src="${modelUrl}"></a-asset-item>
+    </a-assets>
+
+    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+    <a-entity mindar-image-target="targetIndex: 0">
+      <a-entity
+        gltf-model="#model"
+        scale="${s} ${s} ${s}"
+        position="0 0 0.1"
+        rotation="0 0 0"
+        ${animTag}
+      ></a-entity>
+    </a-entity>
+  </a-scene>
+
+  <script>
+    var hint = document.getElementById('hint');
+    var bar  = document.getElementById('bar');
+    var sceneEl = document.querySelector('a-scene');
+
+    sceneEl.addEventListener('loaded', function() { bar.textContent = 'Point at your marker image'; });
+
+    sceneEl.addEventListener('targetFound', function() {
+      hint.textContent = '✓ Tracking'; hint.classList.add('found'); bar.textContent = 'AR active';
+    });
+    sceneEl.addEventListener('targetLost', function() {
+      hint.textContent = 'Point at your image'; hint.classList.remove('found'); bar.textContent = 'Searching…';
+    });
+  </script>
+</body>
+</html>`;
+}
+
+function buildARJsHtml({ name, modelUrl, scale, animTag }: {
+  name: string; modelUrl: string; scale: number; animTag: string;
+}) {
+  const AFRAME = "https://aframe.io/releases/1.3.0/aframe.min.js";
+  const ARJS   = "https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js";
 
   const html = `<!DOCTYPE html>
 <html>
@@ -116,7 +213,7 @@ export async function GET(
       <div class="dot">⬡</div>
       <span class="nm">${name}</span>
     </div>
-    <div id="hint">${markerUrl ? "Point at your marker" : "Point at Hiro marker"}</div>
+    <div id="hint">Point at Hiro marker</div>
   </div>
   <div id="bar">Loading…</div>
 
@@ -130,10 +227,10 @@ export async function GET(
       <a-asset-item id="model" src="${modelUrl}"></a-asset-item>
     </a-assets>
 
-    <a-marker preset="${markerUrl ? "custom" : "hiro"}" ${markerUrl ? `url="${markerUrl}"` : ""} id="marker">
+    <a-marker preset="hiro" id="marker">
       <a-entity
         gltf-model="#model"
-        scale="${s} ${s} ${s}"
+        scale="${scale} ${scale} ${scale}"
         position="0 0.5 0"
         ${animTag}
       ></a-entity>
@@ -147,26 +244,17 @@ export async function GET(
     var bar  = document.getElementById('bar');
 
     document.querySelector('a-scene').addEventListener('loaded', function() {
-      bar.textContent = '${markerUrl ? "Point at your marker image" : "Point at the Hiro marker"}';
+      bar.textContent = 'Point at the Hiro marker';
     });
-
     document.querySelector('a-assets').addEventListener('loaded', function() {
-      bar.textContent = 'Model ready · ${markerUrl ? "Point at marker" : "Point at Hiro marker"}';
+      bar.textContent = 'Model ready · Point at Hiro marker';
     });
-
     document.getElementById('marker').addEventListener('markerFound', function() {
-      hint.textContent = '✓ Tracking';
-      hint.classList.add('found');
-      bar.textContent = 'AR active';
+      hint.textContent = '✓ Tracking'; hint.classList.add('found'); bar.textContent = 'AR active';
     });
-
     document.getElementById('marker').addEventListener('markerLost', function() {
-      hint.textContent = '${markerUrl ? "Point at your marker" : "Point at Hiro marker"}';
-      hint.classList.remove('found');
-      bar.textContent = 'Searching for marker…';
+      hint.textContent = 'Point at Hiro marker'; hint.classList.remove('found'); bar.textContent = 'Searching…';
     });
-
-    // iOS keep video alive
     document.addEventListener('touchend', function() {
       var v = document.querySelector('video');
       if (v && v.paused) v.play().catch(function(){});
@@ -174,11 +262,7 @@ export async function GET(
   </script>
 </body>
 </html>`;
-
-  return new NextResponse(html, {
-    status: 200,
-    headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
-  });
+  return html;
 }
 
 function notFoundHtml(slug: string) {

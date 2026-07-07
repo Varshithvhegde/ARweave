@@ -32,7 +32,7 @@ export default function BuilderToolbar({ slug }: { slug: string }) {
     isPublished, setPublished, publishedSlug,
     setActivePanel,
     modelUrl, modelFile,
-    markerUrl, markerFile,
+    markerUrl, markerFile, markerMindUrl,
     scale, animation,
     baseUrl,
   } = useBuilderStore();
@@ -56,9 +56,9 @@ export default function BuilderToolbar({ slug }: { slug: string }) {
         finalModelUrl = path.startsWith("http") ? path : `${origin}${path}`;
       }
 
-      // Upload marker if it was a local file
-      let finalMarkerUrl: string | null = markerUrl;
-      if (markerFile) {
+      // Use the compiled .mind URL if available, otherwise upload raw image
+      let finalMarkerUrl: string | null = markerMindUrl ?? null;
+      if (!finalMarkerUrl && markerFile) {
         toast.loading("Uploading marker…", { id: "publish" });
         const path = await uploadFile(markerFile, "marker");
         finalMarkerUrl = path.startsWith("http") ? path : `${origin}${path}`;
