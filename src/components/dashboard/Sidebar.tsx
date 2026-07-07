@@ -1,11 +1,12 @@
 "use client";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Layers3, LayoutDashboard, Wand2, BarChart2, Settings, HelpCircle, LogOut, Plus
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { createClient } from "@/lib/supabase/client";
 
 const NAV = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
@@ -20,6 +21,14 @@ const BOTTOM_NAV = [
 
 export default function DashboardSidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+
+  const handleSignOut = async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.refresh();
+    router.push("/login");
+  };
 
   return (
     <aside className="hidden md:flex flex-col w-60 border-r border-border bg-card shrink-0">
@@ -78,7 +87,10 @@ export default function DashboardSidebar() {
             {item.label}
           </Link>
         ))}
-        <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors font-medium">
+        <button
+          onClick={handleSignOut}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors font-medium"
+        >
           <LogOut className="w-4 h-4" />
           Sign out
         </button>
