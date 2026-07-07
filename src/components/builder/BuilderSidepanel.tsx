@@ -47,16 +47,14 @@ export default function BuilderSidepanel() {
     modelUrl, modelName, setModel, setModelFromUrl, clearModel,
     markerUrl, setMarker, clearMarker,
     isPublished, publishedSlug,
+    baseUrl, setBaseUrl,
   } = useBuilderStore();
 
   const markerInputRef = useRef<HTMLInputElement>(null);
   const modelInputRef  = useRef<HTMLInputElement>(null);
   const [copied, setCopied] = useState(false);
 
-  // Build the full share URL using the current host (works with ngrok)
-  const shareUrl = publishedSlug && typeof window !== "undefined"
-    ? `${window.location.origin}/ar/${publishedSlug}`
-    : null;
+  const shareUrl = publishedSlug ? `${baseUrl}/ar/${publishedSlug}` : null;
 
   const handleCopy = () => {
     if (!shareUrl) return;
@@ -276,6 +274,24 @@ export default function BuilderSidepanel() {
         {/* ── SHARE PANEL ── */}
         {activePanel === "settings" && (
           <>
+            {/* Base URL override — key for ngrok testing */}
+            <div>
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5 block">
+                Base URL
+              </Label>
+              <input
+                value={baseUrl}
+                onChange={(e) => setBaseUrl(e.target.value)}
+                placeholder="https://xxxx.ngrok-free.app"
+                className="w-full text-xs bg-muted border border-border rounded-lg px-3 py-2 font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-[var(--brand)]"
+              />
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Using ngrok? Paste your tunnel URL here so the QR works on your phone.
+              </p>
+            </div>
+
+            <Separator />
+
             {isPublished && shareUrl ? (
               <>
                 <div>

@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
   Layers3, LayoutDashboard, Wand2, BarChart2, Settings, HelpCircle, LogOut, Plus
 } from "lucide-react";
@@ -21,13 +21,11 @@ const BOTTOM_NAV = [
 
 export default function DashboardSidebar() {
   const pathname = usePathname();
-  const router = useRouter();
 
   const handleSignOut = async () => {
     const supabase = createClient();
     await supabase.auth.signOut();
-    router.refresh();
-    router.push("/login");
+    window.location.href = "/login";
   };
 
   return (

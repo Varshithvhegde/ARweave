@@ -43,8 +43,7 @@ export default function SignupPage() {
     setLoading(false);
     if (error) { toast.error(error.message); return; }
     toast.success("Account created! Welcome to ARweave.");
-    router.refresh();
-    router.push("/dashboard");
+    window.location.href = "/dashboard";
   };
 
   return (

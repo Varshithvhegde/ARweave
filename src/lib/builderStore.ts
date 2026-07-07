@@ -36,6 +36,10 @@ interface BuilderState {
   publishedSlug: string | null;
   setPublished: (slug: string) => void;
 
+  // Base URL for the QR — defaults to window.location.origin, overrideable with ngrok
+  baseUrl: string;
+  setBaseUrl: (url: string) => void;
+
   // Active panel
   activePanel: "model" | "marker" | "settings";
   setActivePanel: (p: "model" | "marker" | "settings") => void;
@@ -75,6 +79,9 @@ export const useBuilderStore = create<BuilderState>((set) => ({
   isPublished: false,
   publishedSlug: null,
   setPublished: (slug) => set({ isPublished: true, publishedSlug: slug }),
+
+  baseUrl: typeof window !== "undefined" ? window.location.origin : "http://localhost:3000",
+  setBaseUrl: (url) => set({ baseUrl: url.replace(/\/$/, "") }),
 
   activePanel: "model",
   setActivePanel: (p) => set({ activePanel: p }),
