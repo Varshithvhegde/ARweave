@@ -1,6 +1,6 @@
 "use client";
 import { useRef, useState } from "react";
-import { Upload, Box, Scan, Settings2, QrCode, Copy, Check, Loader2 } from "lucide-react";
+import { Upload, Box, Scan, Settings2, QrCode, Copy, Check, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
@@ -16,7 +16,6 @@ const ANIMATIONS: { value: AnimationType; label: string; icon: string }[] = [
   { value: "pulse", label: "Pulse", icon: "💓" },
 ];
 
-// Real free GLB models from public CDN
 const FREE_MODELS = [
   { name: "Duck",    url: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Duck/glTF-Binary/Duck.glb",         icon: "🦆" },
   { name: "Box",     url: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Box/glTF-Binary/Box.glb",           icon: "📦" },
@@ -45,18 +44,17 @@ export default function BuilderSidepanel() {
     activePanel, setActivePanel,
     scale, setScale,
     animation, setAnimation,
-    modelUrl, setModelUrl,
-    markerUrl, setMarkerUrl,
+    modelUrl, modelName, setModel, setModelFromUrl, clearModel,
+    markerUrl, setMarker, clearMarker,
     isPublished, publishedSlug,
   } = useBuilderStore();
 
   const markerInputRef = useRef<HTMLInputElement>(null);
   const modelInputRef  = useRef<HTMLInputElement>(null);
-  const [copied, setCopied]       = useState(false);
-  const [modelLoading, setModelLoading] = useState(false);
-  const [modelName, setModelName] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
-  const shareUrl = publishedSlug
+  // Build the full share URL using the current host (works with ngrok)
+  const shareUrl = publishedSlug && typeof window !== "undefined"
     ? `${window.location.origin}/ar/${publishedSlug}`
     : null;
 
@@ -71,27 +69,19 @@ export default function BuilderSidepanel() {
   const handleMarkerUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const url = URL.createObjectURL(file);
-    setMarkerUrl(url);
+    setMarker(file);
     toast.success("Marker image set!");
   };
 
   const handleModelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setModelLoading(true);
-    const url = URL.createObjectURL(file);
-    setModelName(file.name);
-    setModelUrl(url);
-    setModelLoading(false);
+    setModel(file);
     toast.success(`Model "${file.name}" loaded!`);
   };
 
   const handleFreeModel = (m: typeof FREE_MODELS[0]) => {
-    setModelLoading(true);
-    setModelName(m.name);
-    setModelUrl(m.url);
-    setModelLoading(false);
+    setModelFromUrl(m.url, m.name);
     toast.success(`${m.icon} ${m.name} loaded!`);
   };
 
@@ -99,10 +89,10 @@ export default function BuilderSidepanel() {
     <aside className="w-64 border-l border-border bg-card flex flex-col shrink-0">
       {/* Tabs */}
       <div className="flex border-b border-border px-1 shrink-0">
-        <Tab active={activePanel === "model"}   onClick={() => setActivePanel("model")}>
+        <Tab active={activePanel === "model"}    onClick={() => setActivePanel("model")}>
           <Box className="w-3 h-3 inline mr-1" />Model
         </Tab>
-        <Tab active={activePanel === "marker"}  onClick={() => setActivePanel("marker")}>
+        <Tab active={activePanel === "marker"}   onClick={() => setActivePanel("marker")}>
           <Scan className="w-3 h-3 inline mr-1" />Marker
         </Tab>
         <Tab active={activePanel === "settings"} onClick={() => setActivePanel("settings")}>
@@ -115,12 +105,14 @@ export default function BuilderSidepanel() {
         {/* ── MODEL PANEL ── */}
         {activePanel === "model" && (
           <>
-            {/* Current model indicator */}
+            {/* Active model badge */}
             {modelUrl && (
               <div className="flex items-center gap-2 rounded-lg bg-[var(--brand-muted)] border border-[var(--brand)]/30 px-3 py-2">
-                <div className="w-2 h-2 rounded-full bg-[var(--brand)]" />
-                <span className="text-xs font-medium text-[var(--brand)] truncate">{modelName ?? "Custom model"}</span>
-                <button onClick={() => { setModelUrl(null); setModelName(null); }} className="ml-auto text-muted-foreground hover:text-destructive text-xs">✕</button>
+                <div className="w-2 h-2 rounded-full bg-[var(--brand)] shrink-0" />
+                <span className="text-xs font-medium text-[var(--brand)] truncate flex-1">{modelName ?? "Model loaded"}</span>
+                <button onClick={clearModel} aria-label="Remove model">
+                  <X className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive transition-colors" />
+                </button>
               </div>
             )}
 
@@ -134,15 +126,10 @@ export default function BuilderSidepanel() {
                 onClick={() => modelInputRef.current?.click()}
                 className="w-full border-2 border-dashed border-border rounded-xl p-4 text-center hover:border-[var(--brand)] hover:bg-[var(--brand-muted)] transition-colors group"
               >
-                {modelLoading
-                  ? <Loader2 className="w-5 h-5 mx-auto animate-spin text-[var(--brand)]" />
-                  : <>
-                      <Upload className="w-5 h-5 mx-auto text-muted-foreground group-hover:text-[var(--brand)] mb-1.5 transition-colors" />
-                      <p className="text-xs text-muted-foreground group-hover:text-foreground transition-colors leading-relaxed">
-                        Drop GLB file here<br />or click to browse
-                      </p>
-                    </>
-                }
+                <Upload className="w-5 h-5 mx-auto text-muted-foreground group-hover:text-[var(--brand)] mb-1.5 transition-colors" />
+                <p className="text-xs text-muted-foreground group-hover:text-foreground transition-colors leading-relaxed">
+                  Drop GLB file here<br />or click to browse
+                </p>
               </button>
             </div>
 
@@ -182,10 +169,7 @@ export default function BuilderSidepanel() {
                 <span className="text-xs font-mono text-foreground">{scale.toFixed(1)}x</span>
               </div>
               <input
-                type="range"
-                min={0.1}
-                max={5}
-                step={0.1}
+                type="range" min={0.1} max={5} step={0.1}
                 value={scale}
                 onChange={(e) => setScale(parseFloat(e.target.value))}
                 className="w-full h-1.5 accent-[var(--brand)] cursor-pointer"
@@ -197,9 +181,7 @@ export default function BuilderSidepanel() {
 
             {/* Animation */}
             <div>
-              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2 block">
-                Animation
-              </Label>
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2 block">Animation</Label>
               <div className="grid grid-cols-2 gap-2">
                 {ANIMATIONS.map((a) => (
                   <button
@@ -212,7 +194,7 @@ export default function BuilderSidepanel() {
                         : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
                     )}
                   >
-                    <span>{a.icon}</span> {a.label}
+                    <span>{a.icon}</span>{a.label}
                   </button>
                 ))}
               </div>
@@ -228,7 +210,7 @@ export default function BuilderSidepanel() {
                 Marker image
               </Label>
               <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
-                Upload any image — wedding photo, product, poster. The camera detects this and overlays your 3D model on top.
+                Upload any image. The phone camera will detect it and place your 3D model on top.
               </p>
               <input ref={markerInputRef} type="file" accept="image/*" className="hidden" onChange={handleMarkerUpload} />
               <button
@@ -236,26 +218,27 @@ export default function BuilderSidepanel() {
                 className="w-full border-2 border-dashed border-border rounded-xl overflow-hidden hover:border-[var(--brand)] transition-colors group"
               >
                 {markerUrl
-                  ? <img src={markerUrl} alt="Marker" className="w-full h-36 object-cover" />
+                  // eslint-disable-next-line @next/next/no-img-element
+                  ? <img src={markerUrl} alt="Marker preview" className="w-full h-36 object-cover" />
                   : (
                     <div className="p-5 text-center">
                       <Scan className="w-6 h-6 mx-auto text-muted-foreground group-hover:text-[var(--brand)] mb-2 transition-colors" />
-                      <p className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">
-                        Upload marker image<br />JPG, PNG, WebP
+                      <p className="text-xs text-muted-foreground group-hover:text-foreground">
+                        Upload marker image<br />JPG · PNG · WebP
                       </p>
                     </div>
                   )
                 }
               </button>
+
               {markerUrl && (
                 <div className="flex gap-2 mt-2">
                   <div className="flex items-center gap-1.5 flex-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5">
-                    <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                    <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
                     <span className="text-xs text-emerald-600 font-medium">Marker set</span>
                   </div>
-                  <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => markerInputRef.current?.click()}>
-                    Change
-                  </Button>
+                  <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => markerInputRef.current?.click()}>Change</Button>
+                  <Button variant="ghost" size="sm" className="text-xs h-8 text-destructive hover:text-destructive" onClick={clearMarker}>Remove</Button>
                 </div>
               )}
             </div>
@@ -265,12 +248,28 @@ export default function BuilderSidepanel() {
             <div className="rounded-xl bg-muted/60 border border-border p-3 space-y-2">
               <p className="text-xs font-semibold text-foreground">Tips for best tracking</p>
               <ul className="text-xs text-muted-foreground space-y-1.5">
-                <li>• High-contrast image with unique patterns</li>
-                <li>• Avoid plain colors or blurry photos</li>
-                <li>• Minimum 300×300px recommended</li>
-                <li>• Good lighting when scanning helps</li>
+                <li>• High contrast, lots of unique detail</li>
+                <li>• Avoid plain colors or gradients</li>
+                <li>• Min 300×300px image size</li>
+                <li>• Good lighting when scanning</li>
               </ul>
             </div>
+
+            {!markerUrl && (
+              <div className="rounded-xl bg-blue-500/10 border border-blue-500/20 p-3">
+                <p className="text-xs text-blue-600 font-medium mb-1">No marker? Use Hiro</p>
+                <p className="text-xs text-blue-600/80 mb-2">
+                  Skip the marker — the AR viewer will use the standard Hiro marker instead. Print it from below.
+                </p>
+                <a
+                  href="https://raw.githubusercontent.com/AR-js-org/AR.js/master/data/images/hiro.png"
+                  target="_blank" rel="noopener noreferrer"
+                  className="text-xs underline text-blue-600 font-medium"
+                >
+                  Download Hiro marker →
+                </a>
+              </div>
+            )}
           </>
         )}
 
@@ -285,16 +284,15 @@ export default function BuilderSidepanel() {
                   </Label>
                   <div className="flex gap-2">
                     <input
-                      readOnly
-                      value={shareUrl}
-                      className="flex-1 text-xs bg-muted border border-border rounded-lg px-3 py-2 font-mono min-w-0 text-foreground"
+                      readOnly value={shareUrl}
+                      className="flex-1 text-xs bg-muted border border-border rounded-lg px-3 py-2 font-mono min-w-0"
                     />
                     <Button size="icon" variant="outline" className="shrink-0 h-9 w-9" onClick={handleCopy} aria-label="Copy link">
                       {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
                     </Button>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1.5">
-                    Open this on your phone, allow camera, point at the marker image.
+                  <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+                    Open on your phone, allow camera, point at the marker.
                   </p>
                 </div>
 
@@ -308,29 +306,29 @@ export default function BuilderSidepanel() {
                     <div className="bg-white p-3 rounded-xl border border-border shadow-sm">
                       <QRCode value={shareUrl} size={148} level="M" />
                     </div>
-                    <p className="text-xs text-muted-foreground text-center">
-                      Scan with your phone camera to open the AR experience
+                    <p className="text-xs text-muted-foreground text-center leading-relaxed">
+                      Scan with your phone to launch the AR experience
                     </p>
                   </div>
                 </div>
 
                 {!markerUrl && (
-                  <div className="rounded-xl bg-yellow-500/10 border border-yellow-500/20 p-3">
-                    <p className="text-xs text-yellow-600 font-medium mb-1">No marker set</p>
-                    <p className="text-xs text-yellow-600/80">
-                      Go to the Marker tab and upload an image for the camera to track.
+                  <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-3">
+                    <p className="text-xs text-amber-600 font-medium mb-1">Using Hiro marker</p>
+                    <p className="text-xs text-amber-600/80">
+                      No marker was set. The AR viewer will look for the Hiro pattern marker.
                     </p>
                   </div>
                 )}
               </>
             ) : (
-              <div className="flex flex-col items-center justify-center text-center py-8 gap-3">
+              <div className="flex flex-col items-center justify-center text-center py-10 gap-3">
                 <div className="w-12 h-12 rounded-2xl bg-muted flex items-center justify-center">
                   <QrCode className="w-6 h-6 text-muted-foreground" />
                 </div>
                 <p className="text-sm font-medium">Not published yet</p>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Hit <strong>Publish</strong> in the toolbar to generate your QR and AR link.
+                <p className="text-xs text-muted-foreground leading-relaxed max-w-[180px]">
+                  Add a 3D model then hit <strong>Publish</strong> to get your QR code.
                 </p>
               </div>
             )}

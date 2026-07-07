@@ -90,7 +90,12 @@ function LoadingBox() {
 }
 
 export default function SceneCanvas() {
-  const { modelUrl, transformMode, scale, animation } = useBuilderStore();
+  const { modelUrl, transformMode, scale, animation } = useBuilderStore((s) => ({
+    modelUrl: s.modelUrl,
+    transformMode: s.transformMode,
+    scale: s.scale,
+    animation: s.animation,
+  }));
 
   return (
     <Canvas

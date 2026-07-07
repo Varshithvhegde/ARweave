@@ -1,5 +1,6 @@
 "use client";
-import { Move, RotateCcw, Maximize2, ArrowLeft, Eye, Globe } from "lucide-react";
+import { useState } from "react";
+import { Move, RotateCcw, Maximize2, ArrowLeft, Eye, Globe, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useBuilderStore, type TransformMode } from "@/lib/builderStore";
@@ -8,10 +9,20 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 const MODES: { mode: TransformMode; icon: React.FC<{ className?: string }>; label: string }[] = [
-  { mode: "translate", icon: Move,       label: "Move" },
-  { mode: "rotate",    icon: RotateCcw,  label: "Rotate" },
-  { mode: "scale",     icon: Maximize2,  label: "Scale" },
+  { mode: "translate", icon: Move,      label: "Move" },
+  { mode: "rotate",    icon: RotateCcw, label: "Rotate" },
+  { mode: "scale",     icon: Maximize2, label: "Scale" },
 ];
+
+async function uploadFile(file: File, type: "model" | "marker"): Promise<string> {
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("type", type);
+  const res = await fetch("/api/upload", { method: "POST", body: fd });
+  if (!res.ok) throw new Error("Upload failed");
+  const { url } = await res.json();
+  return url;
+}
 
 export default function BuilderToolbar() {
   const {
@@ -19,26 +30,72 @@ export default function BuilderToolbar() {
     projectName, setProjectName,
     isPublished, setPublished, publishedSlug,
     setActivePanel,
+    modelUrl, modelFile,
+    markerUrl, markerFile,
+    scale, animation,
   } = useBuilderStore();
 
-  const handlePublish = () => {
-    const slug = projectName
-      .toLowerCase()
-      .replace(/\s+/g, "-")
-      .replace(/[^a-z0-9-]/g, "")
-      .slice(0, 40) || "my-experience";
-    setPublished(slug);
-    setActivePanel("settings");
-    toast.success("Published!", {
-      description: `AR viewer ready — check the Share tab for your QR code.`,
-    });
+  const [publishing, setPublishing] = useState(false);
+
+  const handlePublish = async () => {
+    if (!modelUrl) { toast.error("Add a 3D model first"); return; }
+    setPublishing(true);
+
+    try {
+      // Upload model file if it was a local upload (has a File object)
+      let finalModelUrl = modelUrl;
+      if (modelFile) {
+        toast.loading("Uploading model…", { id: "publish" });
+        finalModelUrl = await uploadFile(modelFile, "model");
+      }
+
+      // Upload marker if it was a local file
+      let finalMarkerUrl: string | null = markerUrl;
+      if (markerFile) {
+        toast.loading("Uploading marker…", { id: "publish" });
+        finalMarkerUrl = await uploadFile(markerFile, "marker");
+      }
+
+      const slug = projectName
+        .toLowerCase()
+        .replace(/\s+/g, "-")
+        .replace(/[^a-z0-9-]/g, "")
+        .slice(0, 40) || "my-experience";
+
+      toast.loading("Publishing…", { id: "publish" });
+
+      const res = await fetch("/api/experience", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          slug,
+          name: projectName,
+          modelUrl: finalModelUrl,
+          markerUrl: finalMarkerUrl,
+          scale,
+          animation,
+        }),
+      });
+
+      if (!res.ok) throw new Error("Failed to save experience");
+
+      setPublished(slug);
+      setActivePanel("settings");
+      toast.success("Published!", {
+        id: "publish",
+        description: "Scan the QR on your phone to test AR",
+      });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Publish failed", { id: "publish" });
+    } finally {
+      setPublishing(false);
+    }
   };
 
   const previewUrl = publishedSlug ? `/ar/${publishedSlug}` : null;
 
   return (
     <div className="h-14 bg-card border-b border-border flex items-center px-3 gap-2 shrink-0">
-      {/* Back */}
       <Link href="/dashboard">
         <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label="Back">
           <ArrowLeft className="w-4 h-4" />
@@ -47,17 +104,15 @@ export default function BuilderToolbar() {
 
       <Separator orientation="vertical" className="h-5" />
 
-      {/* Project name */}
       <input
         value={projectName}
         onChange={(e) => setProjectName(e.target.value)}
-        className="text-sm font-semibold bg-transparent border-none outline-none hover:bg-muted focus:bg-muted px-2 py-1 rounded-md w-40 truncate transition-colors"
+        className="text-sm font-semibold bg-transparent border-none outline-none hover:bg-muted focus:bg-muted px-2 py-1 rounded-md w-44 truncate transition-colors"
         aria-label="Project name"
       />
 
       <Separator orientation="vertical" className="h-5" />
 
-      {/* Transform mode toggle */}
       <div className="flex items-center bg-muted rounded-lg p-1 gap-0.5">
         {MODES.map(({ mode, icon: Icon, label }) => (
           <button
@@ -79,7 +134,6 @@ export default function BuilderToolbar() {
       </div>
 
       <div className="ml-auto flex items-center gap-2">
-        {/* Preview button — opens AR viewer in new tab */}
         {isPublished && previewUrl && (
           <a href={previewUrl} target="_blank" rel="noopener noreferrer">
             <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs">
@@ -91,10 +145,13 @@ export default function BuilderToolbar() {
         <Button
           size="sm"
           onClick={handlePublish}
-          className="brand-gradient text-white border-0 hover:opacity-90 gap-1.5 h-8 text-xs font-semibold"
+          disabled={publishing || !modelUrl}
+          className="brand-gradient text-white border-0 hover:opacity-90 gap-1.5 h-8 text-xs font-semibold disabled:opacity-50"
         >
-          <Globe className="w-3.5 h-3.5" />
-          {isPublished ? "Update" : "Publish"}
+          {publishing
+            ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Publishing…</>
+            : <><Globe className="w-3.5 h-3.5" />{isPublished ? "Update" : "Publish"}</>
+          }
         </Button>
       </div>
     </div>

@@ -4,17 +4,22 @@ export type TransformMode = "translate" | "rotate" | "scale";
 export type AnimationType = "none" | "spin" | "float" | "pulse";
 
 interface BuilderState {
-  // Project
   projectName: string;
   setProjectName: (name: string) => void;
 
-  // 3D Model
-  modelUrl: string | null;
-  setModelUrl: (url: string | null) => void;
+  // 3D Model — blobUrl for preview, rawFile for upload, cdnUrl for CDN models
+  modelUrl: string | null;        // preview URL (blob or CDN)
+  modelFile: File | null;         // set when user uploads a file
+  modelName: string | null;
+  setModel: (file: File) => void;
+  setModelFromUrl: (url: string, name: string) => void;
+  clearModel: () => void;
 
   // Marker image
-  markerUrl: string | null;
-  setMarkerUrl: (url: string | null) => void;
+  markerUrl: string | null;       // preview URL (blob)
+  markerFile: File | null;
+  setMarker: (file: File) => void;
+  clearMarker: () => void;
 
   // Transform
   transformMode: TransformMode;
@@ -41,10 +46,23 @@ export const useBuilderStore = create<BuilderState>((set) => ({
   setProjectName: (name) => set({ projectName: name }),
 
   modelUrl: null,
-  setModelUrl: (url) => set({ modelUrl: url }),
+  modelFile: null,
+  modelName: null,
+  setModel: (file) => set({
+    modelFile: file,
+    modelUrl: URL.createObjectURL(file),
+    modelName: file.name,
+  }),
+  setModelFromUrl: (url, name) => set({ modelUrl: url, modelFile: null, modelName: name }),
+  clearModel: () => set({ modelUrl: null, modelFile: null, modelName: null }),
 
   markerUrl: null,
-  setMarkerUrl: (url) => set({ markerUrl: url }),
+  markerFile: null,
+  setMarker: (file) => set({
+    markerFile: file,
+    markerUrl: URL.createObjectURL(file),
+  }),
+  clearMarker: () => set({ markerUrl: null, markerFile: null }),
 
   transformMode: "translate",
   setTransformMode: (mode) => set({ transformMode: mode }),

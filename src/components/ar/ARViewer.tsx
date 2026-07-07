@@ -1,9 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { useBuilderStore } from "@/lib/builderStore";
 import { Layers3, Loader2, AlertTriangle } from "lucide-react";
 
-// AR.js + A-Frame must be loaded dynamically — they attach to window
 const AFRAME_URL = "https://aframe.io/releases/1.5.0/aframe.min.js";
 const ARJS_URL   = "https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js";
 
@@ -11,66 +9,93 @@ function loadScript(src: string): Promise<void> {
   return new Promise((resolve, reject) => {
     if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
     const s = document.createElement("script");
-    s.src = src;
+    s.src = src; s.async = true;
     s.onload = () => resolve();
     s.onerror = () => reject(new Error(`Failed to load ${src}`));
     document.head.appendChild(s);
   });
 }
 
-type Status = "loading-scripts" | "ready" | "error" | "no-config";
+type Config = {
+  slug: string;
+  name: string;
+  modelUrl: string;
+  markerUrl: string | null;
+  scale: number;
+  animation: string;
+};
+
+type Status = "fetching" | "loading-ar" | "ready" | "not-found" | "error";
 
 export default function ARViewer({ slug }: { slug: string }) {
-  const { modelUrl, markerUrl, scale, animation } = useBuilderStore();
   const containerRef = useRef<HTMLDivElement>(null);
-  const [status, setStatus] = useState<Status>("loading-scripts");
+  const [status, setStatus]   = useState<Status>("fetching");
+  const [config, setConfig]   = useState<Config | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
 
+  // Step 1 — fetch config from API
   useEffect(() => {
-    if (!modelUrl) { setStatus("no-config"); return; }
+    fetch(`/api/experience?slug=${encodeURIComponent(slug)}`)
+      .then((r) => {
+        if (r.status === 404) { setStatus("not-found"); return null; }
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((data) => {
+        if (!data) return;
+        setConfig(data);
+        setStatus("loading-ar");
+      })
+      .catch((e) => {
+        setErrorMsg(e.message);
+        setStatus("error");
+      });
+  }, [slug]);
 
+  // Step 2 — load AR.js scripts once config is ready
+  useEffect(() => {
+    if (status !== "loading-ar") return;
     let cancelled = false;
 
-    async function bootstrap() {
-      try {
-        // Load A-Frame first, then AR.js (order matters)
-        await loadScript(AFRAME_URL);
-        await loadScript(ARJS_URL);
-        if (cancelled) return;
-        setStatus("ready");
-      } catch (e) {
-        if (cancelled) return;
-        setErrorMsg(e instanceof Error ? e.message : "Failed to load AR libraries");
-        setStatus("error");
-      }
-    }
+    loadScript(AFRAME_URL)
+      .then(() => loadScript(ARJS_URL))
+      .then(() => { if (!cancelled) setStatus("ready"); })
+      .catch((e) => { if (!cancelled) { setErrorMsg(e.message); setStatus("error"); } });
 
-    bootstrap();
     return () => { cancelled = true; };
-  }, [modelUrl]);
+  }, [status]);
 
+  // Step 3 — inject A-Frame scene once scripts are loaded
   useEffect(() => {
-    if (status !== "ready" || !containerRef.current || !modelUrl) return;
+    if (status !== "ready" || !config || !containerRef.current) return;
 
-    // Clear any previous scene
     containerRef.current.innerHTML = "";
 
+    const { modelUrl, markerUrl, scale, animation } = config;
+
+    // Build A-Frame animation attribute
     const animAttr = animation === "spin"
       ? `property: rotation; to: 0 360 0; loop: true; dur: 3000; easing: linear`
       : animation === "float"
-      ? `property: position; from: 0 0 0; to: 0 0.15 0; dir: alternate; loop: true; dur: 1500; easing: easeInOutSine`
+      ? `property: position; from: 0 0.1 0; to: 0 0.3 0; dir: alternate; loop: true; dur: 1500; easing: easeInOutSine`
       : animation === "pulse"
-      ? `property: scale; from: ${scale} ${scale} ${scale}; to: ${scale * 1.12} ${scale * 1.12} ${scale * 1.12}; dir: alternate; loop: true; dur: 800; easing: easeInOutSine`
+      ? `property: scale; from: ${scale} ${scale} ${scale}; to: ${scale * 1.12} ${scale * 1.12} ${scale * 1.12}; dir: alternate; loop: true; dur: 900; easing: easeInOutSine`
       : "";
 
-    const sceneHTML = markerUrl
-      ? /* Image tracking (NFT) */ `
+    const anim = animAttr ? `animation="${animAttr}"` : "";
+    const sc   = `${scale} ${scale} ${scale}`;
+
+    let sceneHTML: string;
+
+    if (markerUrl) {
+      // NFT image tracking — detects the custom marker image
+      sceneHTML = `
         <a-scene
           embedded
           arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
           vr-mode-ui="enabled: false"
-          renderer="logarithmicDepthBuffer: true; precision: medium;"
-          style="width:100vw;height:100vh;position:fixed;top:0;left:0;"
+          renderer="logarithmicDepthBuffer: true; precision: medium; antialias: true;"
+          style="width:100vw;height:100dvh;position:fixed;top:0;left:0;"
         >
           <a-nft
             type="nft"
@@ -82,121 +107,128 @@ export default function ARViewer({ slug }: { slug: string }) {
           >
             <a-entity
               gltf-model="${modelUrl}"
-              scale="${scale} ${scale} ${scale}"
+              scale="${sc}"
               position="0 0 0"
               rotation="-90 0 0"
-              ${animAttr ? `animation="${animAttr}"` : ""}
+              ${anim}
             ></a-entity>
           </a-nft>
           <a-entity camera></a-entity>
-        </a-scene>
-      `
-      : /* Markerless — place on flat surface */ `
+        </a-scene>`;
+    } else {
+      // Hiro marker — standard printed pattern
+      sceneHTML = `
         <a-scene
           embedded
-          arjs="sourceType: webcam; debugUIEnabled: false; patternRatio: 0.75"
+          arjs="sourceType: webcam; debugUIEnabled: false; patternRatio: 0.75;"
           vr-mode-ui="enabled: false"
-          renderer="logarithmicDepthBuffer: true; precision: medium;"
-          style="width:100vw;height:100vh;position:fixed;top:0;left:0;"
+          renderer="logarithmicDepthBuffer: true; precision: medium; antialias: true;"
+          style="width:100vw;height:100dvh;position:fixed;top:0;left:0;"
         >
           <a-marker preset="hiro">
             <a-entity
               gltf-model="${modelUrl}"
-              scale="${scale} ${scale} ${scale}"
+              scale="${sc}"
               position="0 0 0"
-              ${animAttr ? `animation="${animAttr}"` : ""}
+              ${anim}
             ></a-entity>
           </a-marker>
           <a-entity camera></a-entity>
-        </a-scene>
-      `;
+        </a-scene>`;
+    }
 
     containerRef.current.innerHTML = sceneHTML;
-  }, [status, modelUrl, markerUrl, scale, animation]);
+  }, [status, config]);
 
-  // ── No config (opened fresh, no store data) ──
-  if (status === "no-config") {
+  // ── Screens ──
+
+  if (status === "not-found") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-black text-white px-6">
-        <div className="text-center space-y-4 max-w-sm">
-          <div className="w-14 h-14 rounded-2xl brand-gradient mx-auto flex items-center justify-center">
-            <Layers3 className="w-7 h-7 text-white" />
-          </div>
-          <h1 className="text-xl font-bold">AR experience not found</h1>
-          <p className="text-sm text-white/60">
-            This experience may not exist yet or was opened without a 3D model configured.
-          </p>
-          <a href="/dashboard" className="inline-block mt-2 text-sm underline text-violet-400">
-            Go to dashboard
-          </a>
-        </div>
-      </div>
+      <Screen icon={<AlertTriangle className="w-8 h-8 text-amber-400" />} title="Experience not found">
+        <p className="text-sm text-white/60 text-center">
+          This AR experience hasn&apos;t been published yet.<br />Go back to the builder and hit Publish.
+        </p>
+        <a href="/dashboard" className="text-sm text-violet-400 underline">Open builder</a>
+      </Screen>
     );
   }
 
-  // ── Error ──
   if (status === "error") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-black text-white px-6">
-        <div className="text-center space-y-4 max-w-sm">
-          <AlertTriangle className="w-10 h-10 text-red-400 mx-auto" />
-          <h1 className="text-lg font-bold">Failed to load AR</h1>
-          <p className="text-sm text-white/60">{errorMsg}</p>
-          <button onClick={() => window.location.reload()} className="text-sm underline text-violet-400">
-            Retry
-          </button>
-        </div>
-      </div>
+      <Screen icon={<AlertTriangle className="w-8 h-8 text-red-400" />} title="Something went wrong">
+        <p className="text-sm text-white/60">{errorMsg}</p>
+        <button onClick={() => window.location.reload()} className="text-sm text-violet-400 underline">Retry</button>
+      </Screen>
     );
   }
 
-  // ── Loading scripts ──
-  if (status === "loading-scripts") {
+  if (status === "fetching") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-black text-white">
-        <div className="text-center space-y-4">
-          <Loader2 className="w-10 h-10 animate-spin text-violet-400 mx-auto" />
-          <p className="text-sm text-white/60">Loading AR engine…</p>
-          <p className="text-xs text-white/30">First load may take a few seconds</p>
-        </div>
-      </div>
+      <Screen icon={<Loader2 className="w-8 h-8 text-violet-400 animate-spin" />} title="Loading experience…" />
     );
   }
 
-  // ── AR scene ready ──
+  if (status === "loading-ar") {
+    return (
+      <Screen icon={<Loader2 className="w-8 h-8 text-violet-400 animate-spin" />} title="Loading AR engine…">
+        <p className="text-xs text-white/40">First load may take a few seconds</p>
+      </Screen>
+    );
+  }
+
+  // Ready — render AR scene
   return (
-    <div style={{ width: "100vw", height: "100vh", overflow: "hidden", background: "#000" }}>
-      {/* AR scene is injected here by the useEffect */}
+    <div style={{ width: "100vw", height: "100dvh", overflow: "hidden", background: "#000", position: "fixed", inset: 0 }}>
       <div ref={containerRef} style={{ width: "100%", height: "100%" }} />
 
-      {/* HUD overlay */}
-      <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 999, pointerEvents: "none" }}>
+      {/* HUD */}
+      <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 9999, pointerEvents: "none" }}>
         <div style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "12px 16px",
-          background: "linear-gradient(to bottom, rgba(0,0,0,0.6), transparent)",
+          padding: "14px 16px",
+          background: "linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, transparent 100%)",
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <div style={{
-              width: 28, height: 28, borderRadius: 8,
+              width: 30, height: 30, borderRadius: 9,
               background: "linear-gradient(135deg, #7c3aed, #a855f7)",
               display: "flex", alignItems: "center", justifyContent: "center",
+              boxShadow: "0 2px 8px rgba(124,58,237,0.4)",
             }}>
-              <Layers3 style={{ width: 14, height: 14, color: "white" }} />
+              <Layers3 style={{ width: 15, height: 15, color: "white" }} />
             </div>
-            <span style={{ color: "white", fontSize: 13, fontWeight: 600 }}>ARweave</span>
+            <div>
+              <p style={{ color: "white", fontSize: 13, fontWeight: 700, lineHeight: 1 }}>ARweave</p>
+              {config?.name && (
+                <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 10, marginTop: 2 }}>{config.name}</p>
+              )}
+            </div>
           </div>
           <div style={{
-            background: "rgba(255,255,255,0.15)",
-            backdropFilter: "blur(8px)",
+            background: "rgba(255,255,255,0.12)",
+            backdropFilter: "blur(10px)",
+            WebkitBackdropFilter: "blur(10px)",
             borderRadius: 20,
-            padding: "4px 12px",
-            color: "white",
+            padding: "5px 12px",
+            color: "rgba(255,255,255,0.9)",
             fontSize: 11,
+            fontWeight: 500,
           }}>
-            {markerUrl ? "Point at your marker image" : "Point at a Hiro marker"}
+            {config?.markerUrl ? "Point at your marker image" : "Point at Hiro marker"}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function Screen({ icon, title, children }: { icon: React.ReactNode; title: string; children?: React.ReactNode }) {
+  return (
+    <div style={{ minHeight: "100dvh", display: "flex", alignItems: "center", justifyContent: "center", background: "#080810" }}>
+      <div style={{ textAlign: "center", padding: "0 24px", display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+        {icon}
+        <h1 style={{ color: "white", fontSize: 18, fontWeight: 700 }}>{title}</h1>
+        {children}
       </div>
     </div>
   );
