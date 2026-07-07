@@ -25,7 +25,7 @@ async function uploadFile(file: File, type: "model" | "marker"): Promise<string>
   return url;
 }
 
-export default function BuilderToolbar() {
+export default function BuilderToolbar({ slug }: { slug: string }) {
   const {
     transformMode, setTransformMode,
     projectName, setProjectName,
@@ -64,12 +64,7 @@ export default function BuilderToolbar() {
         finalMarkerUrl = path.startsWith("http") ? path : `${origin}${path}`;
       }
 
-      const slug = projectName
-        .toLowerCase()
-        .replace(/\s+/g, "-")
-        .replace(/[^a-z0-9-]/g, "")
-        .slice(0, 40) || "my-experience";
-
+      // Use the route slug (already created in DB) — not derived from project name
       toast.loading("Publishing…", { id: "publish" });
 
       // Get current user id if logged in

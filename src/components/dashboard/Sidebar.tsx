@@ -2,11 +2,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Layers3, LayoutDashboard, Wand2, BarChart2, Settings, HelpCircle, LogOut, Plus
+  Layers3, LayoutDashboard, Wand2, BarChart2, Settings, HelpCircle, LogOut
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
+import NewExperienceButton from "./NewExperienceButton";
 
 const NAV = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
@@ -42,11 +42,7 @@ export default function DashboardSidebar() {
 
       {/* New experience CTA */}
       <div className="px-3 py-4">
-        <Link href="/dashboard/builder/new">
-          <Button size="sm" className="w-full brand-gradient text-white border-0 hover:opacity-90 gap-2 font-semibold">
-            <Plus className="w-4 h-4" /> New experience
-          </Button>
-        </Link>
+        <NewExperienceButton className="w-full text-sm h-9" />
       </div>
 
       {/* Nav */}

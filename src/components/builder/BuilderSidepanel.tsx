@@ -39,7 +39,7 @@ function Tab({ active, onClick, children }: { active: boolean; onClick: () => vo
   );
 }
 
-export default function BuilderSidepanel() {
+export default function BuilderSidepanel({ slug: _slug }: { slug: string }) {
   const {
     activePanel, setActivePanel,
     scale, setScale,

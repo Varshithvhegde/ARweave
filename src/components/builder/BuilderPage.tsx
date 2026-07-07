@@ -1,35 +1,53 @@
 "use client";
+import { useEffect } from "react";
 import dynamic from "next/dynamic";
 import BuilderToolbar from "./BuilderToolbar";
 import BuilderSidepanel from "./BuilderSidepanel";
+import { useBuilderStore } from "@/lib/builderStore";
 import { Loader2 } from "lucide-react";
 
-// Load 3D canvas client-side only (WebGL)
 const SceneCanvas = dynamic(() => import("./SceneCanvas"), {
   ssr: false,
   loading: () => (
-    <div className="flex-1 flex items-center justify-center bg-slate-950">
+    <div className="flex-1 flex items-center justify-center bg-[#0f0f1a]">
       <Loader2 className="w-6 h-6 text-violet-400 animate-spin" />
     </div>
   ),
 });
 
-export default function BuilderPage() {
+export default function BuilderPage({ slug }: { slug: string }) {
+  const { setProjectName, setPublished, setModelFromUrl, setActivePanel } = useBuilderStore();
+
+  // Load existing experience config if slug exists in API
+  useEffect(() => {
+    if (!slug || slug === "new") return;
+
+    fetch(`/api/experience?slug=${encodeURIComponent(slug)}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (!data) return;
+        setProjectName(data.name || slug);
+        if (data.modelUrl) setModelFromUrl(data.modelUrl, data.name || slug);
+        // Mark as published if it was already published
+        if (data.status === "published" || data.modelUrl) {
+          setPublished(slug);
+          setActivePanel("settings");
+        }
+      })
+      .catch(() => {});
+  }, [slug, setProjectName, setModelFromUrl, setPublished, setActivePanel]);
+
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-slate-950">
-      <BuilderToolbar />
+    <div className="flex flex-col h-screen overflow-hidden bg-[#0f0f1a]">
+      <BuilderToolbar slug={slug} />
       <div className="flex flex-1 overflow-hidden">
-        {/* 3D Viewport */}
         <div className="flex-1 relative">
           <SceneCanvas />
-          {/* Viewport label */}
-          <div className="absolute top-3 left-3 bg-black/40 backdrop-blur-sm rounded-lg px-3 py-1.5 text-xs text-white/70 pointer-events-none font-mono">
-            3D Viewport — orbit: drag · zoom: scroll
+          <div className="absolute top-3 left-3 bg-black/40 backdrop-blur-sm rounded-lg px-3 py-1.5 text-xs text-white/60 pointer-events-none font-mono">
+            orbit: drag · zoom: scroll · {slug}
           </div>
         </div>
-
-        {/* Right sidepanel */}
-        <BuilderSidepanel />
+        <BuilderSidepanel slug={slug} />
       </div>
     </div>
   );
