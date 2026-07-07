@@ -34,18 +34,17 @@ export async function GET(
     );
   }
 
-  const { modelUrl, markerUrl, scale, animation, name } = config;
-  const s = `${scale} ${scale} ${scale}`;
+  const { modelUrl, scale, animation, name } = config;
+  const s = scale;
 
   const animAttr = animation === "spin"
     ? `property: rotation; to: 0 360 0; loop: true; dur: 3000; easing: linear`
     : animation === "float"
     ? `property: position; from: 0 0.5 0; to: 0 0.8 0; dir: alternate; loop: true; dur: 1500; easing: easeInOutSine`
     : animation === "pulse"
-    ? `property: scale; from: ${scale*0.9} ${scale*0.9} ${scale*0.9}; to: ${scale*1.1} ${scale*1.1} ${scale*1.1}; dir: alternate; loop: true; dur: 900; easing: easeInOutSine`
+    ? `property: scale; from: ${s*0.9} ${s*0.9} ${s*0.9}; to: ${s*1.1} ${s*1.1} ${s*1.1}; dir: alternate; loop: true; dur: 900`
     : "";
   const animTag = animAttr ? `animation="${animAttr}"` : "";
-  const hint = markerUrl ? "Point at your marker image" : "Point at the Hiro marker";
 
   const html = `<!DOCTYPE html>
 <html>
@@ -53,47 +52,30 @@ export async function GET(
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
   <title>${name} · ARweave</title>
+
+  <!-- Scripts MUST be in <head> per A-Frame requirement -->
+  <script src="${AFRAME}"></script>
+  <script src="${ARJS}"></script>
+
   <style>
     * { margin: 0; padding: 0; }
-    html, body { overflow: hidden; width: 100%; height: 100%; background: transparent; }
-
-    /*
-      THE KEY FIX:
-      AR.js puts the video in the DOM and styles it itself.
-      We must NOT override its positioning.
-      We only need to make the canvas transparent so the video shows through.
-    */
-    canvas.a-canvas {
-      background: transparent !important;
-    }
-
-    /* HUD always on top */
+    html, body { overflow: hidden; width: 100%; height: 100%; }
+    .a-canvas { background: transparent !important; }
     #hud {
       position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
-      pointer-events: none;
-      padding: 14px 16px;
+      pointer-events: none; padding: 14px 16px;
       background: linear-gradient(to bottom, rgba(0,0,0,0.55), transparent);
       display: flex; align-items: center; justify-content: space-between;
       font-family: -apple-system, sans-serif;
     }
     .hud-left { display: flex; align-items: center; gap: 8px; }
-    .hud-icon {
-      width: 28px; height: 28px; border-radius: 8px;
-      background: linear-gradient(135deg,#7c3aed,#a855f7);
-      display: flex; align-items: center; justify-content: center;
-      font-size: 13px; color: #fff;
-    }
-    .hud-name { color: #fff; font-size: 13px; font-weight: 700; }
-    .hud-hint {
-      background: rgba(255,255,255,0.18);
-      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-      border-radius: 20px; padding: 5px 12px;
-      color: #fff; font-size: 11px; font-weight: 500;
-    }
+    .hud-icon { width: 28px; height: 28px; border-radius: 8px; background: linear-gradient(135deg,#7c3aed,#a855f7); display:flex; align-items:center; justify-content:center; font-size:13px; color:#fff; }
+    .hud-name { color:#fff; font-size:13px; font-weight:700; }
+    .hud-hint { background:rgba(255,255,255,0.18); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); border-radius:20px; padding:5px 12px; color:#fff; font-size:11px; font-weight:500; }
     #statusbar {
       position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
       z-index: 9999; font-family: -apple-system, sans-serif; font-size: 12px;
-      color: rgba(255,255,255,0.8); background: rgba(0,0,0,0.5);
+      color: rgba(255,255,255,0.9); background: rgba(0,0,0,0.6);
       backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
       border-radius: 20px; padding: 6px 16px; white-space: nowrap;
     }
@@ -103,14 +85,11 @@ export async function GET(
   <div id="hud">
     <div class="hud-left">
       <div class="hud-icon">⬡</div>
-      <span class="hud-name">ARweave</span>
+      <span class="hud-name">ARweave · ${name}</span>
     </div>
-    <div class="hud-hint">${hint}</div>
+    <div class="hud-hint">Point at Hiro marker</div>
   </div>
-  <div id="statusbar">Requesting camera…</div>
-
-  <script src="${AFRAME}"></script>
-  <script src="${ARJS}"></script>
+  <div id="statusbar" id="statusbar">Loading…</div>
 
   <a-scene
     embedded
@@ -119,36 +98,58 @@ export async function GET(
     loading-screen="enabled: false"
     renderer="logarithmicDepthBuffer: true; precision: medium; antialias: true; alpha: true;"
   >
+    <a-assets>
+      <a-asset-item id="duck" src="${modelUrl}" response-type="arraybuffer"></a-asset-item>
+    </a-assets>
+
     <a-marker preset="hiro">
-      <a-entity
-        gltf-model="${modelUrl}"
-        scale="${s}"
+      <!-- Visible box so we can confirm marker tracking works even if GLB fails -->
+      <a-box
         position="0 0.5 0"
+        scale="0.5 0.5 0.5"
+        color="#7c3aed"
+        opacity="0.85"
+        ${animTag}
+      ></a-box>
+
+      <!-- GLB model on top of the box — loads async -->
+      <a-entity
+        gltf-model="#duck"
+        scale="${s} ${s} ${s}"
+        position="0 0 0"
         ${animTag}
       ></a-entity>
     </a-marker>
+
     <a-entity camera></a-entity>
   </a-scene>
 
   <script>
     var bar = document.getElementById('statusbar');
+    var scene = document.querySelector('a-scene');
 
-    document.querySelector('a-scene').addEventListener('loaded', function() {
-      bar.textContent = '${hint}';
+    scene.addEventListener('loaded', function() {
+      bar.textContent = 'Camera active · Point at Hiro marker';
     });
 
-    // Log camera permission result
+    // Track asset loading
+    var assets = document.querySelector('a-assets');
+    assets.addEventListener('loaded', function() {
+      bar.textContent = 'Model loaded · Point at Hiro marker';
+    });
+    assets.addEventListener('timeout', function() {
+      bar.textContent = 'Model load timeout — box will still show';
+    });
+
+    // Camera permission check
     navigator.mediaDevices && navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-      .then(function(s) {
-        s.getTracks().forEach(function(t){ t.stop(); });
-        bar.textContent = 'Camera ready · ${hint}';
-      })
+      .then(function(s) { s.getTracks().forEach(function(t){ t.stop(); }); })
       .catch(function(e) {
-        bar.textContent = '⚠ Camera: ' + e.message;
+        bar.textContent = 'Camera error: ' + e.message;
         bar.style.color = '#f87171';
       });
 
-    // iOS: keep video playing
+    // iOS keep video alive
     document.addEventListener('touchend', function() {
       var v = document.querySelector('video');
       if (v && v.paused) v.play().catch(function(){});
