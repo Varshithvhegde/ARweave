@@ -1,76 +1,130 @@
 "use client";
-import { Suspense, useRef } from "react";
-import { Canvas } from "@react-three/fiber";
-import {
-  OrbitControls, Environment, Grid, TransformControls, useGLTF, Center
-} from "@react-three/drei";
-import type { TransformControls as TCType } from "three-stdlib";
-import { useBuilderStore } from "@/lib/builderStore";
+import { Suspense, useRef, useEffect } from "react";
+import { Canvas, useFrame } from "@react-three/fiber";
+import { OrbitControls, Environment, Grid, TransformControls, useGLTF, Center } from "@react-three/drei";
+import * as THREE from "three";
+import { useBuilderStore, type AnimationType } from "@/lib/builderStore";
 
-function ModelMesh({ url, mode }: { url: string; mode: "translate" | "rotate" | "scale" }) {
-  const { scene } = useGLTF(url);
-  const meshRef = useRef(null);
-  const tcRef = useRef<TCType>(null);
-
-  return (
-    <group>
-      <TransformControls ref={tcRef} mode={mode} object={meshRef.current ?? undefined}>
-        <Center ref={meshRef}>
-          <primitive object={scene.clone()} />
-        </Center>
-      </TransformControls>
-    </group>
-  );
+// Applies animation each frame based on type
+function useModelAnimation(groupRef: React.RefObject<THREE.Group | null>, animation: AnimationType) {
+  useFrame((_, delta) => {
+    if (!groupRef.current) return;
+    if (animation === "spin") {
+      groupRef.current.rotation.y += delta * 1.2;
+    } else if (animation === "float") {
+      groupRef.current.position.y = Math.sin(Date.now() * 0.001) * 0.15;
+    } else if (animation === "pulse") {
+      const s = 1 + Math.sin(Date.now() * 0.002) * 0.08;
+      groupRef.current.scale.setScalar(s);
+    }
+  });
 }
 
-function PlaceholderBox({ mode }: { mode: "translate" | "rotate" | "scale" }) {
-  const meshRef = useRef(null);
+function GLBModel({ url, mode, scale, animation }: {
+  url: string;
+  mode: "translate" | "rotate" | "scale";
+  scale: number;
+  animation: AnimationType;
+}) {
+  const { scene } = useGLTF(url);
+  const groupRef = useRef<THREE.Group>(null);
+
+  useModelAnimation(groupRef, animation);
+
+  // Apply scale when it changes (skip if pulse is animating it)
+  useEffect(() => {
+    if (groupRef.current && animation !== "pulse") {
+      groupRef.current.scale.setScalar(scale);
+    }
+  }, [scale, animation]);
 
   return (
-    <TransformControls mode={mode} object={meshRef.current ?? undefined}>
-      <mesh ref={meshRef} castShadow>
-        <boxGeometry args={[1, 1, 1]} />
-        <meshStandardMaterial color="#7c3aed" roughness={0.3} metalness={0.1} />
-      </mesh>
+    <TransformControls mode={mode}>
+      <group ref={groupRef}>
+        <Center>
+          <primitive object={scene.clone()} />
+        </Center>
+      </group>
     </TransformControls>
   );
 }
 
+function PlaceholderModel({ mode, scale, animation }: {
+  mode: "translate" | "rotate" | "scale";
+  scale: number;
+  animation: AnimationType;
+}) {
+  const groupRef = useRef<THREE.Group>(null);
+
+  useModelAnimation(groupRef, animation);
+
+  useEffect(() => {
+    if (groupRef.current && animation !== "pulse") {
+      groupRef.current.scale.setScalar(scale);
+    }
+  }, [scale, animation]);
+
+  return (
+    <TransformControls mode={mode}>
+      <group ref={groupRef}>
+        <mesh castShadow receiveShadow>
+          <boxGeometry args={[1, 1, 1]} />
+          <meshStandardMaterial color="#7c3aed" roughness={0.3} metalness={0.2} />
+        </mesh>
+      </group>
+    </TransformControls>
+  );
+}
+
+function LoadingBox() {
+  const ref = useRef<THREE.Mesh>(null);
+  useFrame((_, delta) => {
+    if (ref.current) ref.current.rotation.y += delta;
+  });
+  return (
+    <mesh ref={ref}>
+      <boxGeometry args={[0.8, 0.8, 0.8]} />
+      <meshStandardMaterial color="#7c3aed" wireframe />
+    </mesh>
+  );
+}
+
 export default function SceneCanvas() {
-  const { modelUrl, transformMode } = useBuilderStore();
+  const { modelUrl, transformMode, scale, animation } = useBuilderStore();
 
   return (
     <Canvas
-      camera={{ position: [0, 2, 5], fov: 50 }}
+      camera={{ position: [0, 1.5, 4], fov: 50 }}
       shadows
+      gl={{ preserveDrawingBuffer: true }}
       className="w-full h-full"
     >
-      <ambientLight intensity={0.6} />
-      <directionalLight position={[4, 6, 4]} intensity={1.2} castShadow />
-      <pointLight position={[-4, 3, -4]} intensity={0.4} color="#a78bfa" />
+      <color attach="background" args={["#0f0f1a"]} />
+      <ambientLight intensity={0.5} />
+      <directionalLight position={[5, 8, 5]} intensity={1.4} castShadow shadow-mapSize={[1024, 1024]} />
+      <pointLight position={[-4, 3, -4]} intensity={0.6} color="#a78bfa" />
+      <pointLight position={[4, 1, 4]} intensity={0.3} color="#60a5fa" />
 
-      <Suspense fallback={null}>
-        {modelUrl ? (
-          <ModelMesh url={modelUrl} mode={transformMode} />
-        ) : (
-          <PlaceholderBox mode={transformMode} />
-        )}
+      <Suspense fallback={<LoadingBox />}>
+        {modelUrl
+          ? <GLBModel url={modelUrl} mode={transformMode} scale={scale} animation={animation} />
+          : <PlaceholderModel mode={transformMode} scale={scale} animation={animation} />
+        }
         <Environment preset="city" />
       </Suspense>
 
       <Grid
-        args={[12, 12]}
-        cellSize={1}
-        cellThickness={0.5}
-        cellColor="#6b7280"
-        sectionColor="#9ca3af"
+        args={[20, 20]}
+        cellSize={0.8}
+        cellThickness={0.4}
+        cellColor="#2d2d4e"
+        sectionColor="#4a4a7a"
         sectionSize={4}
-        fadeDistance={20}
+        fadeDistance={18}
         infiniteGrid
-        receiveShadow
       />
 
-      <OrbitControls makeDefault enableDamping dampingFactor={0.08} />
+      <OrbitControls makeDefault enableDamping dampingFactor={0.07} minDistance={1} maxDistance={20} />
     </Canvas>
   );
 }
