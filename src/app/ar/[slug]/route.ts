@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getExperience } from "@/lib/experienceStore";
+import { createClient } from "@supabase/supabase-js";
 
 const DUCK   = "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Duck/glTF-Binary/Duck.glb";
 const AFRAME = "https://aframe.io/releases/1.3.0/aframe.min.js";
 const ARJS   = "https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js";
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 export async function GET(
   _req: NextRequest,
@@ -11,48 +17,69 @@ export async function GET(
 ) {
   const { slug } = await params;
 
-  let config = getExperience(slug);
+  // 1. Try Supabase DB
+  let modelUrl: string | null = null;
+  let markerUrl: string | null = null;
+  let scale = 1;
+  let animation = "spin";
+  let name = slug;
 
-  if (!config && slug === "untitled-experience") {
-    config = {
-      slug,
-      name: "Demo",
-      modelUrl: DUCK,
-      markerUrl: null,
-      scale: 1,
-      animation: "spin",
-      createdAt: new Date().toISOString(),
-    };
+  const { data } = await supabase
+    .from("experiences")
+    .select("name, model_url, marker_url, scale, animation_type")
+    .eq("slug", slug)
+    .single();
+
+  if (data) {
+    name      = data.name ?? slug;
+    modelUrl  = data.model_url;
+    markerUrl = data.marker_url;
+    scale     = Number(data.scale) || 1;
+    animation = data.animation_type ?? "spin";
+  } else {
+    // 2. Fall back to local file cache
+    const cached = getExperience(slug);
+    if (cached) {
+      name      = cached.name;
+      modelUrl  = cached.modelUrl || null;
+      markerUrl = cached.markerUrl;
+      scale     = Number(cached.scale) || 1;
+      animation = cached.animation ?? "spin";
+    }
   }
 
-  if (!config) {
-    return new NextResponse(
-      `<!DOCTYPE html><html><body style="background:#000;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
-        <div style="text-align:center"><h2>Not found</h2><p style="color:#666">${slug}</p></div>
-      </body></html>`,
-      { status: 404, headers: { "Content-Type": "text/html" } }
-    );
+  // 3. Seed demo
+  if (!modelUrl && slug === "untitled-experience") {
+    modelUrl  = DUCK;
+    markerUrl = null;
+    scale     = 1;
+    animation = "spin";
+    name      = "Demo — Duck on Hiro";
   }
 
-  const { modelUrl, scale, animation } = config;
+  if (!modelUrl) {
+    return new NextResponse(notFoundHtml(slug), {
+      status: 404,
+      headers: { "Content-Type": "text/html" },
+    });
+  }
+
   const s = scale;
-
   const animAttr = animation === "spin"
     ? `property: rotation; to: 0 360 0; loop: true; dur: 3000; easing: linear`
     : animation === "float"
-    ? `property: position; from: 0 0.5 0; to: 0 0.8 0; dir: alternate; loop: true; dur: 1500`
+    ? `property: position; from: 0 0.5 0; to: 0 0.8 0; dir: alternate; loop: true; dur: 1500; easing: easeInOutSine`
     : animation === "pulse"
     ? `property: scale; from: ${s*0.9} ${s*0.9} ${s*0.9}; to: ${s*1.1} ${s*1.1} ${s*1.1}; dir: alternate; loop: true; dur: 900`
     : "";
   const animTag = animAttr ? `animation="${animAttr}"` : "";
 
-  // Absolute minimal AR.js — matches official docs exactly, debug UI enabled
   const html = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
-  <title>ARweave</title>
+  <title>${name} · ARweave</title>
   <script src="${AFRAME}"></script>
   <script src="${ARJS}"></script>
   <style>
@@ -60,7 +87,7 @@ export async function GET(
     #hud {
       position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
       pointer-events: none; padding: 10px 14px;
-      background: linear-gradient(to bottom, rgba(0,0,0,0.7), transparent);
+      background: linear-gradient(to bottom, rgba(0,0,0,0.6), transparent);
       display: flex; align-items: center; justify-content: space-between;
       font-family: -apple-system, sans-serif;
     }
@@ -68,29 +95,16 @@ export async function GET(
     .dot  { width:26px; height:26px; border-radius:8px; background:linear-gradient(135deg,#7c3aed,#a855f7); display:flex; align-items:center; justify-content:center; font-size:12px; }
     .nm   { color:#fff; font-size:13px; font-weight:700; }
     #hint {
-      font-family: -apple-system, sans-serif; font-size:11px; font-weight:600;
+      font-family:-apple-system,sans-serif; font-size:11px; font-weight:600;
       color:#fff; background:rgba(255,255,255,0.18);
       backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
-      border-radius:20px; padding:4px 12px;
-      transition: background 0.3s;
+      border-radius:20px; padding:4px 12px; transition:background 0.3s;
     }
-    #hint.found { background: rgba(5,150,105,0.85); }
-    /* Debug canvas from AR.js — show it small in corner so we can see what it's scanning */
-    #arjs-debug-canvas, canvas[id^="arjs-"] {
-      position: fixed !important;
-      bottom: 60px !important;
-      right: 8px !important;
-      width: 120px !important;
-      height: 90px !important;
-      z-index: 9998 !important;
-      border: 2px solid rgba(255,255,255,0.3) !important;
-      border-radius: 6px !important;
-      opacity: 0.85 !important;
-    }
+    #hint.found { background:rgba(5,150,105,0.85); }
     #bar {
-      position:fixed; bottom:16px; left:50%; transform:translateX(-50%);
+      position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
       z-index:9999; font-family:-apple-system,sans-serif; font-size:11px;
-      color:rgba(255,255,255,0.9); background:rgba(0,0,0,0.6);
+      color:rgba(255,255,255,0.85); background:rgba(0,0,0,0.55);
       backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
       border-radius:20px; padding:5px 14px; white-space:nowrap;
     }
@@ -100,74 +114,63 @@ export async function GET(
   <div id="hud">
     <div class="left">
       <div class="dot">⬡</div>
-      <span class="nm">ARweave</span>
+      <span class="nm">${name}</span>
     </div>
-    <div id="hint">Point at Hiro marker</div>
+    <div id="hint">${markerUrl ? "Point at your marker" : "Point at Hiro marker"}</div>
   </div>
-  <div id="bar">Initialising…</div>
+  <div id="bar">Loading…</div>
 
-  <!-- debugUIEnabled: true so we see the detection canvas in corner -->
   <a-scene
     embedded
-    arjs="sourceType: webcam; debugUIEnabled: true; trackingMethod: best;"
+    arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best;"
     vr-mode-ui="enabled: false"
     renderer="logarithmicDepthBuffer: true; alpha: true;"
   >
-    <a-marker preset="hiro" id="marker">
-      <a-box position="0 0.5 0" scale="0.6 0.6 0.6" color="#e11d48"></a-box>
-      <a-entity gltf-model="${modelUrl}" scale="${s} ${s} ${s}" position="0 0 0" ${animTag}></a-entity>
+    <a-assets timeout="30000">
+      <a-asset-item id="model" src="${modelUrl}"></a-asset-item>
+    </a-assets>
+
+    <a-marker preset="${markerUrl ? "custom" : "hiro"}" ${markerUrl ? `url="${markerUrl}"` : ""} id="marker">
+      <a-entity
+        gltf-model="#model"
+        scale="${s} ${s} ${s}"
+        position="0 0.5 0"
+        ${animTag}
+      ></a-entity>
     </a-marker>
+
     <a-entity camera></a-entity>
   </a-scene>
 
   <script>
     var hint = document.getElementById('hint');
     var bar  = document.getElementById('bar');
-    var found = false;
 
     document.querySelector('a-scene').addEventListener('loaded', function() {
-      bar.textContent = 'Ready — point at Hiro marker';
+      bar.textContent = '${markerUrl ? "Point at your marker image" : "Point at the Hiro marker"}';
+    });
+
+    document.querySelector('a-assets').addEventListener('loaded', function() {
+      bar.textContent = 'Model ready · ${markerUrl ? "Point at marker" : "Point at Hiro marker"}';
     });
 
     document.getElementById('marker').addEventListener('markerFound', function() {
-      found = true;
-      hint.textContent = '✓ Marker found!';
+      hint.textContent = '✓ Tracking';
       hint.classList.add('found');
-      bar.textContent = 'Tracking marker…';
+      bar.textContent = 'AR active';
     });
 
     document.getElementById('marker').addEventListener('markerLost', function() {
-      found = false;
-      hint.textContent = 'Point at Hiro marker';
+      hint.textContent = '${markerUrl ? "Point at your marker" : "Point at Hiro marker"}';
       hint.classList.remove('found');
-      bar.textContent = 'Marker lost — keep pointing';
+      bar.textContent = 'Searching for marker…';
     });
 
-    // Mirror-fix: if front camera detected, mirror the video so Hiro is readable
-    var observer = new MutationObserver(function() {
-      var video = document.querySelector('video');
-      if (video) {
-        // Check if this looks like a front camera (MacBook FaceTime / phone selfie)
-        navigator.mediaDevices.enumerateDevices().then(function(devices) {
-          var cams = devices.filter(function(d){ return d.kind === 'videoinput'; });
-          // If only one camera or explicitly front-facing, mirror the video element
-          // so the pattern appears correctly to ARToolkit
-          if (video.srcObject) {
-            var track = video.srcObject.getVideoTracks()[0];
-            if (track) {
-              var settings = track.getSettings();
-              // facingMode 'user' = front camera = mirrored
-              if (settings.facingMode === 'user' || cams.length === 1) {
-                video.style.transform = 'scaleX(-1)';
-                bar.textContent = 'Front camera detected — mirrored for detection';
-              }
-            }
-          }
-        });
-        observer.disconnect();
-      }
+    // iOS keep video alive
+    document.addEventListener('touchend', function() {
+      var v = document.querySelector('video');
+      if (v && v.paused) v.play().catch(function(){});
     });
-    observer.observe(document.body, { childList: true, subtree: true });
   </script>
 </body>
 </html>`;
@@ -176,4 +179,15 @@ export async function GET(
     status: 200,
     headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
   });
+}
+
+function notFoundHtml(slug: string) {
+  return `<!DOCTYPE html><html><body style="background:#08080f;color:#fff;font-family:-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center">
+    <div>
+      <div style="font-size:48px;margin-bottom:16px">⬡</div>
+      <h2 style="margin-bottom:8px;font-size:20px">Experience not found</h2>
+      <p style="color:#555;margin-bottom:20px;font-size:13px">/${slug}</p>
+      <a href="/" style="color:#a78bfa;text-decoration:none;border:1px solid #a78bfa;padding:8px 20px;border-radius:8px;font-size:13px">Go home</a>
+    </div>
+  </body></html>`;
 }
