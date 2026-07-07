@@ -1,22 +1,40 @@
 "use client";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Layers3, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { createClient } from "@/lib/supabase/client";
+import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
   const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
+  const emailRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+  const router = useRouter();
+  const supabase = createClient();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 1200));
+    const { error } = await supabase.auth.signInWithPassword({
+      email: emailRef.current!.value,
+      password: passwordRef.current!.value,
+    });
     setLoading(false);
-    toast.success("Signed in successfully!");
+    if (error) { toast.error(error.message); return; }
+    toast.success("Signed in!");
+    router.push("/dashboard");
+  };
+
+  const handleGoogle = async () => {
+    await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
+    });
   };
 
   return (
@@ -37,7 +55,7 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" placeholder="you@example.com" required autoComplete="email" />
+              <Input ref={emailRef} id="email" type="email" placeholder="you@example.com" required autoComplete="email" />
             </div>
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
@@ -48,6 +66,7 @@ export default function LoginPage() {
               </div>
               <div className="relative">
                 <Input
+                  ref={passwordRef}
                   id="password"
                   type={show ? "text" : "password"}
                   placeholder="••••••••"
@@ -83,7 +102,7 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <Button variant="outline" className="w-full gap-2" type="button">
+          <Button variant="outline" className="w-full gap-2" type="button" onClick={handleGoogle}>
             <svg viewBox="0 0 24 24" className="w-4 h-4" aria-hidden>
               <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
               <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>

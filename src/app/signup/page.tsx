@@ -1,11 +1,13 @@
 "use client";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Layers3, Eye, EyeOff, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { createClient } from "@/lib/supabase/client";
+import { useRouter } from "next/navigation";
 
 const PERKS = [
   "20 AR experiences free forever",
@@ -17,13 +19,31 @@ const PERKS = [
 export default function SignupPage() {
   const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
+  const firstRef = useRef<HTMLInputElement>(null);
+  const lastRef = useRef<HTMLInputElement>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
+  const usernameRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+  const router = useRouter();
+  const supabase = createClient();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 1400));
+    const { error } = await supabase.auth.signUp({
+      email: emailRef.current!.value,
+      password: passwordRef.current!.value,
+      options: {
+        data: {
+          full_name: `${firstRef.current!.value} ${lastRef.current!.value}`.trim(),
+          username: usernameRef.current!.value.toLowerCase(),
+        },
+      },
+    });
     setLoading(false);
+    if (error) { toast.error(error.message); return; }
     toast.success("Account created! Welcome to ARweave.");
+    router.push("/dashboard");
   };
 
   return (
@@ -75,16 +95,16 @@ export default function SignupPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="first">First name</Label>
-                  <Input id="first" placeholder="Varshith" required autoComplete="given-name" />
+                  <Input ref={firstRef} id="first" placeholder="Varshith" required autoComplete="given-name" />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="last">Last name</Label>
-                  <Input id="last" placeholder="Hegde" required autoComplete="family-name" />
+                  <Input ref={lastRef} id="last" placeholder="Hegde" required autoComplete="family-name" />
                 </div>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" placeholder="you@example.com" required autoComplete="email" />
+                <Input ref={emailRef} id="email" type="email" placeholder="you@example.com" required autoComplete="email" />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="username">Username</Label>
@@ -92,13 +112,14 @@ export default function SignupPage() {
                   <span className="flex items-center px-3 border border-r-0 border-border rounded-l-md bg-muted text-muted-foreground text-sm">
                     arweave.app/
                   </span>
-                  <Input id="username" placeholder="yourname" required className="rounded-l-none" autoComplete="username" />
+                  <Input ref={usernameRef} id="username" placeholder="yourname" required className="rounded-l-none" autoComplete="username" />
                 </div>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="password">Password</Label>
                 <div className="relative">
                   <Input
+                    ref={passwordRef}
                     id="password"
                     type={show ? "text" : "password"}
                     placeholder="Min. 8 characters"
