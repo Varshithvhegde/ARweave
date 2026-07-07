@@ -54,7 +54,8 @@ export default function BuilderSidepanel() {
   const modelInputRef  = useRef<HTMLInputElement>(null);
   const [copied, setCopied] = useState(false);
 
-  const shareUrl = publishedSlug ? `${baseUrl}/ar/${publishedSlug}` : null;
+  const effectiveBase = baseUrl.trim() || (typeof window !== "undefined" ? window.location.origin : "");
+  const shareUrl = publishedSlug && effectiveBase ? `${effectiveBase}/ar/${publishedSlug}` : null;
 
   const handleCopy = () => {
     if (!shareUrl) return;
@@ -286,7 +287,8 @@ export default function BuilderSidepanel() {
                 className="w-full text-xs bg-muted border border-border rounded-lg px-3 py-2 font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-[var(--brand)]"
               />
               <p className="text-[10px] text-muted-foreground mt-1">
-                Using ngrok? Paste your tunnel URL here so the QR works on your phone.
+                Leave blank to use <span className="font-mono">{typeof window !== "undefined" ? window.location.origin : "localhost"}</span>
+                {" "}· Paste ngrok URL to test on phone.
               </p>
             </div>
 

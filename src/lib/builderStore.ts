@@ -80,7 +80,7 @@ export const useBuilderStore = create<BuilderState>((set) => ({
   publishedSlug: null,
   setPublished: (slug) => set({ isPublished: true, publishedSlug: slug }),
 
-  baseUrl: typeof window !== "undefined" ? window.location.origin : "http://localhost:3000",
+  baseUrl: "",
   setBaseUrl: (url) => set({ baseUrl: url.replace(/\/$/, "") }),
 
   activePanel: "model",

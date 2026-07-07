@@ -33,6 +33,7 @@ export default function BuilderToolbar() {
     modelUrl, modelFile,
     markerUrl, markerFile,
     scale, animation,
+    baseUrl,
   } = useBuilderStore();
 
   const [publishing, setPublishing] = useState(false);
@@ -41,19 +42,25 @@ export default function BuilderToolbar() {
     if (!modelUrl) { toast.error("Add a 3D model first"); return; }
     setPublishing(true);
 
+    // The base that the phone will use to fetch assets
+    const origin = baseUrl.trim() || window.location.origin;
+
     try {
       // Upload model file if it was a local upload (has a File object)
       let finalModelUrl = modelUrl;
       if (modelFile) {
         toast.loading("Uploading model…", { id: "publish" });
-        finalModelUrl = await uploadFile(modelFile, "model");
+        const path = await uploadFile(modelFile, "model");
+        // Make absolute so the phone can fetch it via ngrok
+        finalModelUrl = path.startsWith("http") ? path : `${origin}${path}`;
       }
 
       // Upload marker if it was a local file
       let finalMarkerUrl: string | null = markerUrl;
       if (markerFile) {
         toast.loading("Uploading marker…", { id: "publish" });
-        finalMarkerUrl = await uploadFile(markerFile, "marker");
+        const path = await uploadFile(markerFile, "marker");
+        finalMarkerUrl = path.startsWith("http") ? path : `${origin}${path}`;
       }
 
       const slug = projectName
