@@ -74,28 +74,42 @@ export default function BuilderSidepanel({ slug: _slug }: { slug: string }) {
     toast.loading("Compiling marker…", { id: "marker" });
 
     try {
-      // Load MindAR compiler from CDN (WASM, runs in browser)
-      if (!(window as any).MINDAR) {
+      // Load MindAR standalone compiler (not the aframe build)
+      const MINDAR_COMPILER_URL = "https://cdn.jsdelivr.net/npm/mind-ar@1.2.2/dist/mindar-image.prod.js";
+
+      if (!(window as any).MINDAR?.IMAGE?.Compiler) {
+        // Remove any stale script tag first
+        document.querySelectorAll(`script[data-mindar]`).forEach(s => s.remove());
         await new Promise<void>((resolve, reject) => {
           const s = document.createElement("script");
-          s.src = "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js";
-          s.onload = () => resolve();
-          s.onerror = () => reject(new Error("Failed to load MindAR compiler"));
+          s.src = MINDAR_COMPILER_URL;
+          s.setAttribute("data-mindar", "1");
+          s.onload = () => {
+            // Give it 200ms to finish initialising
+            setTimeout(resolve, 200);
+          };
+          s.onerror = () => reject(new Error("Failed to load MindAR"));
           document.head.appendChild(s);
         });
       }
 
+      const Compiler = (window as any).MINDAR?.IMAGE?.Compiler;
+      if (!Compiler) throw new Error("MindAR compiler not available — try refreshing the page");
+
       // Convert file to ImageData
       const bitmap = await createImageBitmap(file);
       const canvas = document.createElement("canvas");
-      canvas.width  = bitmap.width;
-      canvas.height = bitmap.height;
+      // Cap at 1024px for faster compilation
+      const MAX = 1024;
+      const ratio = Math.min(MAX / bitmap.width, MAX / bitmap.height, 1);
+      canvas.width  = Math.round(bitmap.width  * ratio);
+      canvas.height = Math.round(bitmap.height * ratio);
       const ctx = canvas.getContext("2d")!;
-      ctx.drawImage(bitmap, 0, 0);
+      ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-      // Compile using MindAR
-      const compiler = new (window as any).MINDAR.IMAGE.Compiler();
+      // Compile
+      const compiler = new Compiler();
       await compiler.compileImageTargets([imageData], () => {});
       const buffer: ArrayBuffer = await compiler.exportData();
 
