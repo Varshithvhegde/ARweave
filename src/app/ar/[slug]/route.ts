@@ -53,14 +53,15 @@ export async function GET(
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
   <title>${name} · ARweave</title>
 
-  <!-- Scripts MUST be in <head> per A-Frame requirement -->
   <script src="${AFRAME}"></script>
   <script src="${ARJS}"></script>
 
   <style>
+    /* Let A-Frame own the page completely — no overflow:hidden, no sizing interference */
     * { margin: 0; padding: 0; }
-    html, body { overflow: hidden; width: 100%; height: 100%; }
-    .a-canvas { background: transparent !important; }
+    body { background: #000; }
+
+    /* HUD floats on top of everything A-Frame renders */
     #hud {
       position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
       pointer-events: none; padding: 14px 16px;
@@ -69,10 +70,20 @@ export async function GET(
       font-family: -apple-system, sans-serif;
     }
     .hud-left { display: flex; align-items: center; gap: 8px; }
-    .hud-icon { width: 28px; height: 28px; border-radius: 8px; background: linear-gradient(135deg,#7c3aed,#a855f7); display:flex; align-items:center; justify-content:center; font-size:13px; color:#fff; }
-    .hud-name { color:#fff; font-size:13px; font-weight:700; }
-    .hud-hint { background:rgba(255,255,255,0.18); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); border-radius:20px; padding:5px 12px; color:#fff; font-size:11px; font-weight:500; }
-    #statusbar {
+    .hud-icon {
+      width: 28px; height: 28px; border-radius: 8px;
+      background: linear-gradient(135deg,#7c3aed,#a855f7);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; color: #fff;
+    }
+    .hud-name { color: #fff; font-size: 13px; font-weight: 700; }
+    .hud-hint {
+      background: rgba(255,255,255,0.18);
+      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+      border-radius: 20px; padding: 5px 12px;
+      color: #fff; font-size: 11px; font-weight: 500;
+    }
+    #bar {
       position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
       z-index: 9999; font-family: -apple-system, sans-serif; font-size: 12px;
       color: rgba(255,255,255,0.9); background: rgba(0,0,0,0.6);
@@ -82,6 +93,7 @@ export async function GET(
   </style>
 </head>
 <body>
+
   <div id="hud">
     <div class="hud-left">
       <div class="hud-icon">⬡</div>
@@ -89,30 +101,31 @@ export async function GET(
     </div>
     <div class="hud-hint">Point at Hiro marker</div>
   </div>
-  <div id="statusbar" id="statusbar">Loading…</div>
+  <div id="bar">Loading…</div>
 
+  <!--
+    NO embedded attribute — let A-Frame take over the full viewport.
+    embedded causes canvas/video size mismatch which breaks marker detection.
+  -->
   <a-scene
-    embedded
     arjs="sourceType: webcam; debugUIEnabled: false; patternRatio: 0.75;"
     vr-mode-ui="enabled: false"
     loading-screen="enabled: false"
     renderer="logarithmicDepthBuffer: true; precision: medium; antialias: true; alpha: true;"
   >
-    <a-assets>
+    <a-assets timeout="15000">
       <a-asset-item id="duck" src="${modelUrl}" response-type="arraybuffer"></a-asset-item>
     </a-assets>
 
     <a-marker preset="hiro">
-      <!-- Visible box so we can confirm marker tracking works even if GLB fails -->
+      <!-- Purple box — confirms tracking even if GLB hasn't loaded yet -->
       <a-box
         position="0 0.5 0"
-        scale="0.5 0.5 0.5"
+        scale="0.4 0.4 0.4"
         color="#7c3aed"
-        opacity="0.85"
-        ${animTag}
+        opacity="0.9"
       ></a-box>
-
-      <!-- GLB model on top of the box — loads async -->
+      <!-- Duck on top -->
       <a-entity
         gltf-model="#duck"
         scale="${s} ${s} ${s}"
@@ -125,31 +138,17 @@ export async function GET(
   </a-scene>
 
   <script>
-    var bar = document.getElementById('statusbar');
-    var scene = document.querySelector('a-scene');
+    var bar = document.getElementById('bar');
 
-    scene.addEventListener('loaded', function() {
-      bar.textContent = 'Camera active · Point at Hiro marker';
+    document.querySelector('a-scene').addEventListener('loaded', function() {
+      bar.textContent = 'Ready · Point at Hiro marker';
     });
 
-    // Track asset loading
-    var assets = document.querySelector('a-assets');
-    assets.addEventListener('loaded', function() {
+    document.querySelector('a-assets').addEventListener('loaded', function() {
       bar.textContent = 'Model loaded · Point at Hiro marker';
     });
-    assets.addEventListener('timeout', function() {
-      bar.textContent = 'Model load timeout — box will still show';
-    });
 
-    // Camera permission check
-    navigator.mediaDevices && navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-      .then(function(s) { s.getTracks().forEach(function(t){ t.stop(); }); })
-      .catch(function(e) {
-        bar.textContent = 'Camera error: ' + e.message;
-        bar.style.color = '#f87171';
-      });
-
-    // iOS keep video alive
+    // iOS keep video alive on touch
     document.addEventListener('touchend', function() {
       var v = document.querySelector('video');
       if (v && v.paused) v.play().catch(function(){});
