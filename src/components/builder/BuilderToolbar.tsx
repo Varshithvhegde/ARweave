@@ -4,6 +4,7 @@ import { Move, RotateCcw, Maximize2, ArrowLeft, Eye, Globe, Loader2 } from "luci
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useBuilderStore, type TransformMode } from "@/lib/builderStore";
+import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -71,16 +72,21 @@ export default function BuilderToolbar() {
 
       toast.loading("Publishing…", { id: "publish" });
 
+      // Get current user id if logged in
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+
       const res = await fetch("/api/experience", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           slug,
-          name: projectName,
-          modelUrl: finalModelUrl,
+          name:      projectName,
+          modelUrl:  finalModelUrl,
           markerUrl: finalMarkerUrl,
           scale,
           animation,
+          userId:    user?.id ?? null,
         }),
       });
 

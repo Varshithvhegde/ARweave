@@ -1,11 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { saveExperience, getExperience } from "@/lib/experienceStore";
 
-// POST /api/experience — save config
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+const DUCK = "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Duck/glTF-Binary/Duck.glb";
+
+// POST /api/experience — save config to DB + local file cache
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { slug, name, modelUrl, markerUrl, scale, animation } = body;
+    const { slug, name, modelUrl, markerUrl, scale, animation, userId } = body;
 
     if (!slug || !modelUrl) {
       return NextResponse.json({ error: "slug and modelUrl required" }, { status: 400 });
@@ -16,12 +24,30 @@ export async function POST(req: NextRequest) {
       name: name || slug,
       modelUrl,
       markerUrl: markerUrl || null,
-      scale: Number(scale) || 1,
+      scale:     Number(scale) || 1,
       animation: animation || "none",
       createdAt: new Date().toISOString(),
     };
 
+    // Always save to local file cache (works without auth)
     saveExperience(config);
+
+    // Also persist to Supabase if we have a userId
+    if (userId) {
+      await supabase.from("experiences").upsert({
+        user_id:        userId,
+        slug,
+        name:           config.name,
+        model_url:      modelUrl,
+        marker_url:     config.markerUrl,
+        scale:          config.scale,
+        animation_type: config.animation,
+        status:         "published",
+        scene_config:   {},
+      }, { onConflict: "user_id,slug" });
+      // Non-fatal — local cache is the fallback
+    }
+
     return NextResponse.json({ ok: true, slug });
   } catch (e) {
     console.error("Save experience error:", e);
@@ -29,23 +55,41 @@ export async function POST(req: NextRequest) {
   }
 }
 
-const DUCK_URL = "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Duck/glTF-Binary/Duck.glb";
-
-// GET /api/experience?slug=xxx — fetch config
+// GET /api/experience?slug=xxx — fetch from DB, fall back to local cache
 export async function GET(req: NextRequest) {
   const slug = req.nextUrl.searchParams.get("slug");
   if (!slug) return NextResponse.json({ error: "slug required" }, { status: 400 });
 
+  // 1. Try Supabase first
+  const { data, error } = await supabase
+    .from("experiences")
+    .select("slug, name, model_url, marker_url, scale, animation_type, scene_config")
+    .eq("slug", slug)
+    .eq("status", "published")
+    .single();
+
+  if (!error && data) {
+    return NextResponse.json({
+      slug:      data.slug,
+      name:      data.name,
+      modelUrl:  data.model_url,
+      markerUrl: data.marker_url,
+      scale:     Number(data.scale),
+      animation: data.animation_type,
+    });
+  }
+
+  // 2. Fall back to local file cache
   let config = getExperience(slug);
 
-  // Seed a default demo experience so /ar/untitled-experience always works
+  // 3. Seed demo experience
   if (!config && slug === "untitled-experience") {
     config = {
-      slug: "untitled-experience",
-      name: "Demo — Duck on Hiro",
-      modelUrl: DUCK_URL,
-      markerUrl: null,   // null = use Hiro marker
-      scale: 1,
+      slug,
+      name:      "Demo — Duck on Hiro",
+      modelUrl:  DUCK,
+      markerUrl: null,
+      scale:     1,
       animation: "spin",
       createdAt: new Date().toISOString(),
     };

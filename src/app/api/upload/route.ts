@@ -1,34 +1,59 @@
 import { NextRequest, NextResponse } from "next/server";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
+import { createClient } from "@supabase/supabase-js";
 
-// Saves uploaded file to /public/uploads/<filename> so it's served as a static asset
-// and accessible from any device on the same ngrok tunnel
+// Use service role key — bypasses RLS for server-side uploads
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+const BUCKET: Record<string, string> = {
+  model:  "models",
+  marker: "markers",
+};
+
+const CONTENT_TYPE: Record<string, string> = {
+  glb:  "model/gltf-binary",
+  gltf: "model/gltf+json",
+  jpg:  "image/jpeg",
+  jpeg: "image/jpeg",
+  png:  "image/png",
+  webp: "image/webp",
+};
+
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
-    const type = formData.get("type") as "model" | "marker";
+    const type = (formData.get("type") as string) || "model";
 
     if (!file) return NextResponse.json({ error: "No file" }, { status: 400 });
 
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
+    const bucket = BUCKET[type] ?? "models";
+    const ext    = file.name.split(".").pop()?.toLowerCase() ?? "bin";
+    const path   = `public/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+    const contentType = CONTENT_TYPE[ext] ?? "application/octet-stream";
 
-    const uploadsDir = path.join(process.cwd(), "public", "uploads");
-    await mkdir(uploadsDir, { recursive: true });
+    const bytes  = await file.arrayBuffer();
 
-    // Sanitize filename
-    const ext = file.name.split(".").pop() ?? (type === "model" ? "glb" : "jpg");
-    const safe = `${type}_${Date.now()}.${ext}`;
-    const filePath = path.join(uploadsDir, safe);
+    const { error } = await supabase.storage
+      .from(bucket)
+      .upload(path, bytes, {
+        contentType,
+        upsert: false,
+        cacheControl: "31536000", // 1 year CDN cache
+      });
 
-    await writeFile(filePath, buffer);
+    if (error) throw new Error(error.message);
 
-    // Return the public URL path — works via ngrok since it's a static file
-    return NextResponse.json({ url: `/uploads/${safe}` });
+    const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+
+    return NextResponse.json({ url: data.publicUrl });
   } catch (e) {
     console.error("Upload error:", e);
-    return NextResponse.json({ error: "Upload failed" }, { status: 500 });
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Upload failed" },
+      { status: 500 }
+    );
   }
 }
