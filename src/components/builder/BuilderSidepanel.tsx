@@ -74,27 +74,47 @@ export default function BuilderSidepanel({ slug: _slug }: { slug: string }) {
     toast.loading("Compiling marker…", { id: "marker" });
 
     try {
-      // Load MindAR standalone compiler (not the aframe build)
-      const MINDAR_COMPILER_URL = "https://cdn.jsdelivr.net/npm/mind-ar@1.2.2/dist/mindar-image.prod.js";
-
-      if (!(window as any).MINDAR?.IMAGE?.Compiler) {
-        // Remove any stale script tag first
-        document.querySelectorAll(`script[data-mindar]`).forEach(s => s.remove());
-        await new Promise<void>((resolve, reject) => {
-          const s = document.createElement("script");
-          s.src = MINDAR_COMPILER_URL;
-          s.setAttribute("data-mindar", "1");
-          s.onload = () => {
-            // Give it 200ms to finish initialising
-            setTimeout(resolve, 200);
+      // Poll until MINDAR.IMAGE.Compiler is available (WASM init is async)
+      const waitForCompiler = (timeoutMs = 15000): Promise<new () => unknown> =>
+        new Promise((resolve, reject) => {
+          const start = Date.now();
+          const check = () => {
+            const C = (window as any).MINDAR?.IMAGE?.Compiler;
+            if (C) { resolve(C); return; }
+            if (Date.now() - start > timeoutMs) { reject(new Error("MindAR WASM timed out — check your connection and try again")); return; }
+            setTimeout(check, 100);
           };
-          s.onerror = () => reject(new Error("Failed to load MindAR"));
-          document.head.appendChild(s);
+          check();
+        });
+
+      // Load script if not already loaded
+      if (!(window as any).MINDAR?.IMAGE?.Compiler) {
+        await new Promise<void>((resolve, reject) => {
+          // Try both possible CDN paths
+          const urls = [
+            "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js",
+            "https://cdn.jsdelivr.net/npm/@hiukim/mind-ar-js@1.2.5/dist/mindar-image.prod.js",
+          ];
+          let tried = 0;
+          const tryLoad = (url: string) => {
+            const existing = document.querySelector(`script[data-mindar]`);
+            if (existing) existing.remove();
+            const s = document.createElement("script");
+            s.src = url;
+            s.setAttribute("data-mindar", "1");
+            s.onload = () => resolve();
+            s.onerror = () => {
+              tried++;
+              if (tried < urls.length) tryLoad(urls[tried]);
+              else reject(new Error("Failed to load MindAR from CDN"));
+            };
+            document.head.appendChild(s);
+          };
+          tryLoad(urls[0]);
         });
       }
 
-      const Compiler = (window as any).MINDAR?.IMAGE?.Compiler;
-      if (!Compiler) throw new Error("MindAR compiler not available — try refreshing the page");
+      const Compiler = await waitForCompiler(15000);
 
       // Convert file to ImageData
       const bitmap = await createImageBitmap(file);
@@ -109,9 +129,9 @@ export default function BuilderSidepanel({ slug: _slug }: { slug: string }) {
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
       // Compile
-      const compiler = new Compiler();
-      await compiler.compileImageTargets([imageData], () => {});
-      const buffer: ArrayBuffer = await compiler.exportData();
+      const compiler = new (Compiler as any)();
+      await (compiler as any).compileImageTargets([imageData], () => {});
+      const buffer: ArrayBuffer = await (compiler as any).exportData();
 
       // Upload .mind file to server → Supabase Storage
       const fd = new FormData();
