@@ -82,21 +82,17 @@ export default function BuilderSidepanel({ slug: _slug }: { slug: string }) {
       const Compiler = mindAR.Compiler ?? mindAR.default?.Compiler;
       if (!Compiler) throw new Error("MindAR Compiler not found — check your internet connection");
 
-      // Convert file to ImageData
-      const bitmap = await createImageBitmap(file);
-      const canvas = document.createElement("canvas");
-      // Cap at 1024px for faster compilation
-      const MAX = 1024;
-      const ratio = Math.min(MAX / bitmap.width, MAX / bitmap.height, 1);
-      canvas.width  = Math.round(bitmap.width  * ratio);
-      canvas.height = Math.round(bitmap.height * ratio);
-      const ctx = canvas.getContext("2d")!;
-      ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      // MindAR expects an HTMLImageElement
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const el = new Image();
+        el.onload = () => resolve(el);
+        el.onerror = reject;
+        el.src = URL.createObjectURL(file);
+      });
 
       // Compile
       const compiler = new (Compiler as any)();
-      await (compiler as any).compileImageTargets([imageData], () => {});
+      await (compiler as any).compileImageTargets([img], () => {});
       const buffer: ArrayBuffer = await (compiler as any).exportData();
 
       // Upload .mind file to server → Supabase Storage
