@@ -1,4 +1,7 @@
-// Module worker — use import() not importScripts()
+// MindAR references window internally — polyfill with self
+self.window = self;
+self.document = { createElement: () => ({ getContext: () => null }) };
+
 self.onmessage = async function(e) {
   const { imageData, width, height } = e.data;
 
