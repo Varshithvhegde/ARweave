@@ -1,36 +1,21 @@
 "use client";
-import { Suspense, useRef, useEffect, useCallback } from "react";
+import { Suspense, useRef, useEffect, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, TransformControls, useGLTF, Center, Grid } from "@react-three/drei";
 import * as THREE from "three";
 import { useBuilderStore, type AnimationType } from "@/lib/builderStore";
 import { sceneRef } from "@/lib/sceneRef";
 
-function useModelAnimation(ref: React.RefObject<THREE.Group | null>, animation: AnimationType) {
-  useFrame((_, delta) => {
-    if (!ref.current) return;
-    if (animation === "spin") ref.current.rotation.y += delta * 1.2;
-    else if (animation === "float") ref.current.position.y = Math.sin(Date.now() * 0.001) * 0.15;
-    else if (animation === "pulse") {
-      const s = 1 + Math.sin(Date.now() * 0.002) * 0.08;
-      ref.current.scale.setScalar(s);
-    }
-  });
-}
-
+// ── Marker plane ─────────────────────────────────────────────
 function MarkerPlane({ url }: { url: string }) {
   const meshRef = useRef<THREE.Mesh>(null);
-
   useEffect(() => {
-    const loader = new THREE.TextureLoader();
-    loader.load(url, (tex) => {
-      if (meshRef.current) {
-        (meshRef.current.material as THREE.MeshStandardMaterial).map = tex;
-        (meshRef.current.material as THREE.MeshStandardMaterial).needsUpdate = true;
-      }
+    new THREE.TextureLoader().load(url, (tex) => {
+      if (!meshRef.current) return;
+      (meshRef.current.material as THREE.MeshStandardMaterial).map = tex;
+      (meshRef.current.material as THREE.MeshStandardMaterial).needsUpdate = true;
     });
   }, [url]);
-
   return (
     <mesh ref={meshRef} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
       <planeGeometry args={[2, 2]} />
@@ -39,13 +24,13 @@ function MarkerPlane({ url }: { url: string }) {
   );
 }
 
-function ModelContent({ url, scale, animation }: { url: string; scale: number; animation: AnimationType }) {
+// ── GLB model content (no animation — animation only in AR viewer) ─
+function ModelContent({ url, scale }: { url: string; scale: number }) {
   const { scene } = useGLTF(url);
   const ref = useRef<THREE.Group>(null);
-  useModelAnimation(ref, animation);
   useEffect(() => {
-    if (ref.current && animation !== "pulse") ref.current.scale.setScalar(scale);
-  }, [scale, animation]);
+    if (ref.current) ref.current.scale.setScalar(scale);
+  }, [scale]);
   return (
     <group ref={ref}>
       <Center disableY>
@@ -55,12 +40,12 @@ function ModelContent({ url, scale, animation }: { url: string; scale: number; a
   );
 }
 
-function BoxContent({ scale, animation }: { scale: number; animation: AnimationType }) {
+// ── Placeholder box ───────────────────────────────────────────
+function BoxContent({ scale }: { scale: number }) {
   const ref = useRef<THREE.Group>(null);
-  useModelAnimation(ref, animation);
   useEffect(() => {
-    if (ref.current && animation !== "pulse") ref.current.scale.setScalar(scale);
-  }, [scale, animation]);
+    if (ref.current) ref.current.scale.setScalar(scale);
+  }, [scale]);
   return (
     <group ref={ref}>
       <mesh castShadow>
@@ -71,41 +56,61 @@ function BoxContent({ scale, animation }: { scale: number; animation: AnimationT
   );
 }
 
+// ── The draggable wrapper ─────────────────────────────────────
+// Key insight: TransformControls needs `object` prop pointing to the
+// Three.js object. We mount TC only AFTER the group ref is ready.
 function DraggableEntity({
-  modelUrl, scale, animation, mode, initialPosition,
+  modelUrl, scale, mode, initialPosition,
 }: {
   modelUrl: string | null;
   scale: number;
-  animation: AnimationType;
   mode: "translate" | "rotate" | "scale";
   initialPosition: { x: number; y: number; z: number };
 }) {
   const groupRef = useRef<THREE.Group>(null);
+  const [ready, setReady] = useState(false);
 
-  // Register with sceneRef so toolbar can read position at publish time
+  // After mount, set initial position and mark ready so TC can attach
   useEffect(() => {
     if (groupRef.current) {
-      sceneRef.group = groupRef.current;
       groupRef.current.position.set(initialPosition.x, initialPosition.y, initialPosition.z);
+      sceneRef.group = groupRef.current;
+      setReady(true);
+      console.log("[SceneCanvas] group ready, initial pos:", initialPosition);
     }
     return () => { sceneRef.group = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
-    <TransformControls mode={mode}>
+    <>
+      {/* Group always in scene */}
       <group ref={groupRef}>
         <Suspense fallback={null}>
           {modelUrl
-            ? <ModelContent url={modelUrl} scale={scale} animation={animation} />
-            : <BoxContent scale={scale} animation={animation} />
+            ? <ModelContent url={modelUrl} scale={scale} />
+            : <BoxContent scale={scale} />
           }
         </Suspense>
       </group>
-    </TransformControls>
+
+      {/* TC attaches to the group object only after ref is populated */}
+      {ready && groupRef.current && (
+        <TransformControls
+          object={groupRef.current}
+          mode={mode}
+          onMouseUp={() => {
+            if (!groupRef.current) return;
+            const p = groupRef.current.position;
+            console.log("[SceneCanvas] mouseUp position:", p.x, p.y, p.z);
+          }}
+        />
+      )}
+    </>
   );
 }
 
+// ── Loading spinner ───────────────────────────────────────────
 function LoadingBox() {
   const ref = useRef<THREE.Mesh>(null);
   useFrame((_, d) => { if (ref.current) ref.current.rotation.y += d; });
@@ -117,21 +122,16 @@ function LoadingBox() {
   );
 }
 
+// ── Main canvas ───────────────────────────────────────────────
 export default function SceneCanvas() {
   const modelUrl      = useBuilderStore((s) => s.modelUrl);
   const markerUrl     = useBuilderStore((s) => s.markerUrl);
   const transformMode = useBuilderStore((s) => s.transformMode);
   const scale         = useBuilderStore((s) => s.scale);
-  const animation     = useBuilderStore((s) => s.animation);
   const modelPosition = useBuilderStore((s) => s.modelPosition);
 
   return (
-    <Canvas
-      camera={{ position: [0, 3, 5], fov: 50 }}
-      shadows
-      gl={{ preserveDrawingBuffer: true }}
-      className="w-full h-full"
-    >
+    <Canvas camera={{ position: [0, 3, 5], fov: 50 }} shadows gl={{ preserveDrawingBuffer: true }} className="w-full h-full">
       <color attach="background" args={["#0f0f1a"]} />
       <ambientLight intensity={0.6} />
       <directionalLight position={[5, 8, 5]} intensity={1.2} castShadow />
@@ -143,24 +143,13 @@ export default function SceneCanvas() {
         <DraggableEntity
           modelUrl={modelUrl}
           scale={scale}
-          animation={animation}
           mode={transformMode}
           initialPosition={modelPosition}
         />
       </Suspense>
 
-      <Grid
-        args={[20, 20]}
-        cellSize={0.5}
-        cellThickness={0.4}
-        cellColor="#2d2d4e"
-        sectionColor="#4a4a7a"
-        sectionSize={2}
-        fadeDistance={18}
-        infiniteGrid
-      />
+      <Grid args={[20, 20]} cellSize={0.5} cellThickness={0.4} cellColor="#2d2d4e" sectionColor="#4a4a7a" sectionSize={2} fadeDistance={18} infiniteGrid />
 
-      {/* makeDefault lets TransformControls disable orbit when dragging */}
       <OrbitControls makeDefault enableDamping dampingFactor={0.08} minDistance={1} maxDistance={20} />
     </Canvas>
   );
