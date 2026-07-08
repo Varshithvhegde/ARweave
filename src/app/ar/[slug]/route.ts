@@ -148,7 +148,7 @@ function buildMindARHtml({ name, modelUrl, markerUrl, scale, animTag, position }
   <div id="bar">Loading AR…</div>
 
   <a-scene
-    mindar-image="imageTargetSrc: ${markerUrl}; autoStart: true; uiLoading: no; uiScanning: no; uiError: no;"
+    mindar-image="imageTargetSrc: ${markerUrl}; autoStart: true; uiLoading: no; uiScanning: no; uiError: no; filterMinCF: 0.001; filterBeta: 0.01; missTolerance: 5; warmupTolerance: 5;"
     color-space="sRGB"
     renderer="colorManagement: true; physicallyCorrectLights: true;"
     vr-mode-ui="enabled: false"
