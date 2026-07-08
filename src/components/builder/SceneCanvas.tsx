@@ -4,6 +4,7 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, TransformControls, useGLTF, Center, Grid } from "@react-three/drei";
 import * as THREE from "three";
 import { useBuilderStore, type AnimationType } from "@/lib/builderStore";
+import { sceneRef } from "@/lib/sceneRef";
 
 function useModelAnimation(ref: React.RefObject<THREE.Group | null>, animation: AnimationType) {
   useFrame((_, delta) => {
@@ -71,44 +72,28 @@ function BoxContent({ scale, animation }: { scale: number; animation: AnimationT
 }
 
 function DraggableEntity({
-  modelUrl, scale, animation, mode, initialPosition, onMove,
+  modelUrl, scale, animation, mode, initialPosition,
 }: {
   modelUrl: string | null;
   scale: number;
   animation: AnimationType;
   mode: "translate" | "rotate" | "scale";
   initialPosition: { x: number; y: number; z: number };
-  onMove: (p: { x: number; y: number; z: number }) => void;
 }) {
-  const groupRef  = useRef<THREE.Group>(null);
-  const onMoveRef = useRef(onMove);
-  onMoveRef.current = onMove;
+  const groupRef = useRef<THREE.Group>(null);
 
-  // Set position on mount only — never re-run, TC owns the transform after that
+  // Register with sceneRef so toolbar can read position at publish time
   useEffect(() => {
     if (groupRef.current) {
+      sceneRef.group = groupRef.current;
       groupRef.current.position.set(initialPosition.x, initialPosition.y, initialPosition.z);
     }
+    return () => { sceneRef.group = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Callback ref — fires as soon as TC mounts (not in useEffect, so ref is never null)
-  const tcCallbackRef = useCallback((tc: any) => {
-    if (!tc) return;
-    // "mouseUp" is the Three.js TransformControls event name
-    tc.addEventListener("mouseUp", () => {
-      if (!groupRef.current) return;
-      const p = groupRef.current.position;
-      onMoveRef.current({
-        x: parseFloat(p.x.toFixed(4)),
-        y: parseFloat(p.y.toFixed(4)),
-        z: parseFloat(p.z.toFixed(4)),
-      });
-    });
-  }, []);
-
   return (
-    <TransformControls ref={tcCallbackRef} mode={mode}>
+    <TransformControls mode={mode}>
       <group ref={groupRef}>
         <Suspense fallback={null}>
           {modelUrl
@@ -139,7 +124,6 @@ export default function SceneCanvas() {
   const scale         = useBuilderStore((s) => s.scale);
   const animation     = useBuilderStore((s) => s.animation);
   const modelPosition = useBuilderStore((s) => s.modelPosition);
-  const setModelPosition = useBuilderStore((s) => s.setModelPosition);
 
   return (
     <Canvas
@@ -162,7 +146,6 @@ export default function SceneCanvas() {
           animation={animation}
           mode={transformMode}
           initialPosition={modelPosition}
-          onMove={setModelPosition}
         />
       </Suspense>
 

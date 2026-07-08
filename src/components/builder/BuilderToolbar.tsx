@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useBuilderStore, type TransformMode } from "@/lib/builderStore";
 import { createClient } from "@/lib/supabase/client";
+import { sceneRef } from "@/lib/sceneRef";
 import Link from "next/link";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -33,7 +34,7 @@ export default function BuilderToolbar({ slug }: { slug: string }) {
     setActivePanel,
     modelUrl, modelFile,
     markerUrl, markerFile, markerMindUrl, markerImageUrl,
-    scale, animation, modelPosition,
+    scale, animation,
     baseUrl,
   } = useBuilderStore();
 
@@ -65,6 +66,12 @@ export default function BuilderToolbar({ slug }: { slug: string }) {
       }
 
       // Use the route slug (already created in DB) — not derived from project name
+      // Read live position directly from Three.js group — bypasses all React state issues
+      const g = sceneRef.group;
+      const livePosition = g
+        ? { x: parseFloat(g.position.x.toFixed(4)), y: parseFloat(g.position.y.toFixed(4)), z: parseFloat(g.position.z.toFixed(4)) }
+        : { x: 0, y: 0, z: 0 };
+
       toast.loading("Publishing…", { id: "publish" });
 
       // Get current user id if logged in
@@ -82,7 +89,7 @@ export default function BuilderToolbar({ slug }: { slug: string }) {
           markerImageUrl: markerImageUrl ?? null,
           scale,
           animation,
-          position:       modelPosition,
+          position:      livePosition,
           userId:         user?.id ?? null,
         }),
       });
