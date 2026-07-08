@@ -90,17 +90,22 @@ export async function GET(
 function buildMindARHtml({ name, modelUrl, markerUrl, scale, animTag }: {
   name: string; modelUrl: string; markerUrl: string; scale: number; animTag: string;
 }) {
-  const s = scale;
+  // MindAR coordinate system: marker width = 1 unit
+  // A scale of 1 from the builder = model fills the marker = 0.1 in MindAR units
+  // User slider goes 0.1x – 5x, map that to 0.01 – 0.5 in MindAR space
+  const s = (scale * 0.1).toFixed(3);
+
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
   <title>${name} · ARweave</title>
-  <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+  <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
   <style>
-    body { margin: 0; overflow: hidden; }
+    * { margin:0; padding:0; }
+    body { overflow: hidden; }
     #hud {
       position:fixed; top:0; left:0; right:0; z-index:9999;
       pointer-events:none; padding:10px 14px;
@@ -108,12 +113,23 @@ function buildMindARHtml({ name, modelUrl, markerUrl, scale, animTag }: {
       display:flex; align-items:center; justify-content:space-between;
       font-family:-apple-system,sans-serif;
     }
-    .left{display:flex;align-items:center;gap:8px;}
-    .dot{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,#7c3aed,#a855f7);display:flex;align-items:center;justify-content:center;font-size:12px;}
-    .nm{color:#fff;font-size:13px;font-weight:700;}
-    #hint{font-family:-apple-system,sans-serif;font-size:11px;font-weight:600;color:#fff;background:rgba(255,255,255,0.18);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-radius:20px;padding:4px 12px;transition:background 0.3s;}
-    #hint.found{background:rgba(5,150,105,0.85);}
-    #bar{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:9999;font-family:-apple-system,sans-serif;font-size:11px;color:rgba(255,255,255,0.85);background:rgba(0,0,0,0.55);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-radius:20px;padding:5px 14px;white-space:nowrap;}
+    .left { display:flex; align-items:center; gap:8px; }
+    .dot  { width:26px; height:26px; border-radius:8px; background:linear-gradient(135deg,#7c3aed,#a855f7); display:flex; align-items:center; justify-content:center; font-size:12px; }
+    .nm   { color:#fff; font-size:13px; font-weight:700; }
+    #hint {
+      font-family:-apple-system,sans-serif; font-size:11px; font-weight:600;
+      color:#fff; background:rgba(255,255,255,0.18);
+      backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+      border-radius:20px; padding:4px 12px; transition:background 0.3s;
+    }
+    #hint.found { background:rgba(5,150,105,0.85); }
+    #bar {
+      position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+      z-index:9999; font-family:-apple-system,sans-serif; font-size:11px;
+      color:rgba(255,255,255,0.85); background:rgba(0,0,0,0.55);
+      backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+      border-radius:20px; padding:5px 14px; white-space:nowrap;
+    }
   </style>
 </head>
 <body>
@@ -121,26 +137,26 @@ function buildMindARHtml({ name, modelUrl, markerUrl, scale, animTag }: {
     <div class="left"><div class="dot">⬡</div><span class="nm">${name}</span></div>
     <div id="hint">Point at your image</div>
   </div>
-  <div id="bar">Loading…</div>
+  <div id="bar">Loading AR…</div>
 
   <a-scene
-    mindar-image="imageTargetSrc: ${markerUrl}; autoStart: true;"
+    mindar-image="imageTargetSrc: ${markerUrl}; autoStart: true; uiLoading: no; uiScanning: no; uiError: no;"
     color-space="sRGB"
     renderer="colorManagement: true; physicallyCorrectLights: true;"
     vr-mode-ui="enabled: false"
     device-orientation-permission-ui="enabled: false"
   >
-    <a-assets>
+    <a-assets timeout="30000">
       <a-asset-item id="model" src="${modelUrl}"></a-asset-item>
     </a-assets>
 
     <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-    <a-entity mindar-image-target="targetIndex: 0">
+    <a-entity mindar-image-target="targetIndex: 0" id="target">
       <a-entity
         gltf-model="#model"
+        position="0 0 0"
         scale="${s} ${s} ${s}"
-        position="0 0 0.1"
         rotation="0 0 0"
         ${animTag}
       ></a-entity>
@@ -148,17 +164,31 @@ function buildMindARHtml({ name, modelUrl, markerUrl, scale, animTag }: {
   </a-scene>
 
   <script>
-    var hint = document.getElementById('hint');
-    var bar  = document.getElementById('bar');
-    var sceneEl = document.querySelector('a-scene');
+    var hint   = document.getElementById('hint');
+    var bar    = document.getElementById('bar');
+    var target = document.getElementById('target');
+    var scene  = document.querySelector('a-scene');
 
-    sceneEl.addEventListener('loaded', function() { bar.textContent = 'Point at your marker image'; });
-
-    sceneEl.addEventListener('targetFound', function() {
-      hint.textContent = '✓ Tracking'; hint.classList.add('found'); bar.textContent = 'AR active';
+    scene.addEventListener('loaded', function() {
+      bar.textContent = 'Point at your marker image';
     });
-    sceneEl.addEventListener('targetLost', function() {
-      hint.textContent = 'Point at your image'; hint.classList.remove('found'); bar.textContent = 'Searching…';
+
+    // MindAR fires targetFound/targetLost on the mindar-image-target entity
+    target.addEventListener('targetFound', function() {
+      hint.textContent = '✓ Tracking';
+      hint.classList.add('found');
+      bar.textContent = 'AR active';
+    });
+    target.addEventListener('targetLost', function() {
+      hint.textContent = 'Point at your image';
+      hint.classList.remove('found');
+      bar.textContent = 'Searching for marker…';
+    });
+
+    // iOS keep video alive
+    document.addEventListener('touchend', function() {
+      var v = document.querySelector('video');
+      if (v && v.paused) v.play().catch(function(){});
     });
   </script>
 </body>
