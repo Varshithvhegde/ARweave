@@ -44,7 +44,9 @@ export default function BuilderToolbar({ slug }: { slug: string }) {
     isPublished, setPublished, publishedSlug,
     setActivePanel,
     markerFile, markerMindUrl, markerImageUrl,
-    animation, baseUrl,
+    scale, animation,
+    overlayType, overlayStorageUrl, overlayWidth, overlayHeight,
+    baseUrl,
   } = useBuilderStore();
 
   const [publishing, setPublishing] = useState(false);
@@ -89,24 +91,35 @@ export default function BuilderToolbar({ slug }: { slug: string }) {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
 
+      // Read live positions from Three.js — needed to restore builder state on refresh
+      // AR viewer ignores these for baked GLBs (uses isBaked check), but builder needs them
+      const g  = sceneRef.group;
+      const og = sceneRef.overlayGroup;
+      const livePosition = g
+        ? { x: parseFloat(g.position.x.toFixed(4)), y: parseFloat(g.position.y.toFixed(4)), z: parseFloat(g.position.z.toFixed(4)) }
+        : { x: 0, y: 0, z: 0 };
+      const liveOverlayPosition = og
+        ? { x: parseFloat(og.position.x.toFixed(4)), y: parseFloat(og.position.y.toFixed(4)), z: parseFloat(og.position.z.toFixed(4)) }
+        : { x: 0, y: 0.01, z: 0 };
+
       const res = await fetch("/api/experience", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           slug,
-          name:           projectName,
-          modelUrl:       finalModelUrl,  // this is now the BAKED GLB
-          markerUrl:      finalMarkerUrl,
-          markerImageUrl: markerImageUrl ?? null,
-          scale:          1,              // scale is baked in — always 1 in AR viewer
+          name:            projectName,
+          modelUrl:        finalModelUrl,   // baked GLB — AR viewer uses isBaked to ignore position/scale
+          markerUrl:       finalMarkerUrl,
+          markerImageUrl:  markerImageUrl ?? null,
+          scale,                            // real scale — builder uses this to restore slider
           animation,
-          position:       { x: 0, y: 0, z: 0 }, // position is baked in — always 0 in AR viewer
-          overlayType:    "none",         // overlay is baked in — no separate overlay in AR viewer
-          overlayUrl:     null,
-          overlayWidth:   1,
-          overlayHeight:  0.75,
-          overlayPosition: { x: 0, y: 0, z: 0 },
-          userId:         user?.id ?? null,
+          position:        livePosition,    // real position — builder uses this to restore placement
+          overlayType,                      // real overlay — builder uses this to restore overlay panel
+          overlayUrl:      overlayStorageUrl ?? null,
+          overlayWidth,
+          overlayHeight,
+          overlayPosition: liveOverlayPosition,
+          userId:          user?.id ?? null,
         }),
       });
 
