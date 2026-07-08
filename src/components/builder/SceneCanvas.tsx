@@ -1,5 +1,5 @@
 "use client";
-import { Suspense, useRef, useEffect } from "react";
+import { Suspense, useRef, useEffect, useCallback } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, TransformControls, useGLTF, Center, Grid } from "@react-three/drei";
 import * as THREE from "three";
@@ -80,11 +80,11 @@ function DraggableEntity({
   initialPosition: { x: number; y: number; z: number };
   onMove: (p: { x: number; y: number; z: number }) => void;
 }) {
-  const groupRef   = useRef<THREE.Group>(null);
-  const onMoveRef  = useRef(onMove);
-  onMoveRef.current = onMove; // always current without re-adding listeners
+  const groupRef  = useRef<THREE.Group>(null);
+  const onMoveRef = useRef(onMove);
+  onMoveRef.current = onMove;
 
-  // Set initial position on mount
+  // Set position on mount only — never re-run, TC owns the transform after that
   useEffect(() => {
     if (groupRef.current) {
       groupRef.current.position.set(initialPosition.x, initialPosition.y, initialPosition.z);
@@ -92,20 +92,23 @@ function DraggableEntity({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Every frame: read actual position from Three.js object and sync to store
-  // This is the only reliable way — TC updates the matrix, not React state
-  useFrame(() => {
-    if (!groupRef.current) return;
-    const p = groupRef.current.position;
-    // Round to 4dp to avoid floating point noise updates
-    const x = parseFloat(p.x.toFixed(4));
-    const y = parseFloat(p.y.toFixed(4));
-    const z = parseFloat(p.z.toFixed(4));
-    onMoveRef.current({ x, y, z });
-  });
+  // Callback ref — fires as soon as TC mounts (not in useEffect, so ref is never null)
+  const tcCallbackRef = useCallback((tc: any) => {
+    if (!tc) return;
+    // "mouseUp" is the Three.js TransformControls event name
+    tc.addEventListener("mouseUp", () => {
+      if (!groupRef.current) return;
+      const p = groupRef.current.position;
+      onMoveRef.current({
+        x: parseFloat(p.x.toFixed(4)),
+        y: parseFloat(p.y.toFixed(4)),
+        z: parseFloat(p.z.toFixed(4)),
+      });
+    });
+  }, []);
 
   return (
-    <TransformControls mode={mode}>
+    <TransformControls ref={tcCallbackRef} mode={mode}>
       <group ref={groupRef}>
         <Suspense fallback={null}>
           {modelUrl
