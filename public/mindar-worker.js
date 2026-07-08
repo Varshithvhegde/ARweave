@@ -1,6 +1,16 @@
-// MindAR references window internally — polyfill with self
+// MindAR uses DOM APIs — polyfill for Worker context
 self.window = self;
-self.document = { createElement: () => ({ getContext: () => null }) };
+self.document = {
+  createElement: (tag) => {
+    if (tag === 'canvas') {
+      // Return a real OffscreenCanvas so drawImage works
+      return new OffscreenCanvas(1, 1);
+    }
+    return { style: {}, appendChild: () => {}, removeChild: () => {} };
+  },
+  createElementNS: (_ns, tag) => self.document.createElement(tag),
+  body: { appendChild: () => {}, removeChild: () => {} },
+};
 
 self.onmessage = async function(e) {
   const { imageData, width, height } = e.data;
