@@ -197,6 +197,24 @@ export default function BuilderSidepanel({ slug: _slug }: { slug: string }) {
   return (
     <aside className="w-64 border-l border-border bg-card flex flex-col shrink-0">
       {/* Tabs */}
+      {/* Active TC indicator */}
+      <div className="px-3 py-1.5 border-b border-border bg-muted/40 flex items-center gap-2 shrink-0">
+        <div className="w-1.5 h-1.5 rounded-full bg-[var(--brand)] animate-pulse" />
+        <span className="text-[10px] text-muted-foreground font-medium">
+          Controlling: <span className="text-foreground">{activePanel === "overlay" ? "Image overlay" : "3D Model"}</span>
+        </span>
+        {activePanel !== "overlay" && overlayUrl && (
+          <button onClick={() => setActivePanel("overlay")} className="ml-auto text-[10px] text-[var(--brand)] hover:underline">
+            Switch to overlay →
+          </button>
+        )}
+        {activePanel === "overlay" && (
+          <button onClick={() => setActivePanel("model")} className="ml-auto text-[10px] text-[var(--brand)] hover:underline">
+            Switch to model →
+          </button>
+        )}
+      </div>
+
       <div className="flex border-b border-border px-1 shrink-0">
         <Tab active={activePanel === "model"}    onClick={() => setActivePanel("model")}>
           <Box className="w-3 h-3 inline mr-1" />Model

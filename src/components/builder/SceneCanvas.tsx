@@ -6,7 +6,7 @@ import * as THREE from "three";
 import { useBuilderStore } from "@/lib/builderStore";
 import { sceneRef } from "@/lib/sceneRef";
 
-// ── Marker reference plane (not exported — just visual guide) ─
+// ── Marker reference plane (visual guide, NOT in rootGroup) ───
 function MarkerPlane({ url }: { url: string }) {
   const meshRef = useRef<THREE.Mesh>(null);
   useEffect(() => {
@@ -17,14 +17,14 @@ function MarkerPlane({ url }: { url: string }) {
     });
   }, [url]);
   return (
-    <mesh ref={meshRef} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+    <mesh ref={meshRef} rotation={[-Math.PI / 2, 0, 0]}>
       <planeGeometry args={[2, 2]} />
       <meshStandardMaterial transparent opacity={0.7} />
     </mesh>
   );
 }
 
-// ── GLB model ─────────────────────────────────────────────────
+// ── GLB model content ─────────────────────────────────────────
 function ModelContent({ url, scale }: { url: string; scale: number }) {
   const { scene } = useGLTF(url);
   const ref = useRef<THREE.Group>(null);
@@ -38,75 +38,69 @@ function ModelContent({ url, scale }: { url: string; scale: number }) {
   );
 }
 
-// ── Draggable 3D model with TC ────────────────────────────────
-function DraggableModel({
-  modelUrl, scale, mode, initialPosition, isActive,
+// ── Model mesh (no TC — TC is rendered OUTSIDE rootGroup) ─────
+function ModelMesh({
+  modelUrl, scale, initialPosition, onGroupReady,
 }: {
   modelUrl: string | null;
   scale: number;
-  mode: "translate" | "rotate" | "scale";
   initialPosition: { x: number; y: number; z: number };
-  isActive: boolean;
+  onGroupReady: (g: THREE.Group) => void;
 }) {
   const groupRef = useRef<THREE.Group>(null);
-  const [ready, setReady] = useState(false);
+  const notified = useRef(false);
 
   useEffect(() => {
-    if (groupRef.current) {
+    if (groupRef.current && !notified.current) {
       groupRef.current.position.set(initialPosition.x, initialPosition.y, initialPosition.z);
       sceneRef.group = groupRef.current;
-      setReady(true);
+      onGroupReady(groupRef.current);
+      notified.current = true;
     }
     return () => { sceneRef.group = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
-    <>
-      <group ref={groupRef} name="model">
-        <Suspense fallback={null}>
-          {modelUrl
-            ? <ModelContent url={modelUrl} scale={scale} />
-            : (
-              <mesh castShadow>
-                <boxGeometry args={[0.5, 0.5, 0.5]} />
-                <meshStandardMaterial color="#7c3aed" roughness={0.3} metalness={0.2} />
-              </mesh>
-            )
-          }
-        </Suspense>
-      </group>
-      {ready && groupRef.current && isActive && (
-        <TransformControls object={groupRef.current} mode={mode} />
-      )}
-    </>
+    <group ref={groupRef} name="model">
+      <Suspense fallback={null}>
+        {modelUrl
+          ? <ModelContent url={modelUrl} scale={scale} />
+          : (
+            <mesh castShadow>
+              <boxGeometry args={[0.5, 0.5, 0.5]} />
+              <meshStandardMaterial color="#7c3aed" roughness={0.3} metalness={0.2} />
+            </mesh>
+          )
+        }
+      </Suspense>
+    </group>
   );
 }
 
-// ── Draggable overlay image plane with TC ─────────────────────
-function OverlayPlane({
-  url, width, height, mode, initialPosition, isActive,
+// ── Overlay image plane mesh (no TC) ──────────────────────────
+function OverlayMesh({
+  url, width, height, initialPosition, onGroupReady,
 }: {
   url: string;
   width: number;
   height: number;
-  mode: "translate" | "rotate" | "scale";
   initialPosition: { x: number; y: number; z: number };
-  isActive: boolean;
+  onGroupReady: (g: THREE.Group) => void;
 }) {
   const meshRef  = useRef<THREE.Mesh>(null);
   const groupRef = useRef<THREE.Group>(null);
-  const [ready, setReady] = useState(false);
+  const notified = useRef(false);
 
   useEffect(() => {
     new THREE.TextureLoader().load(url, (tex) => {
       if (!meshRef.current) return;
+      tex.colorSpace = THREE.SRGBColorSpace;
       (meshRef.current.material as THREE.MeshBasicMaterial).map = tex;
       (meshRef.current.material as THREE.MeshBasicMaterial).needsUpdate = true;
     });
   }, [url]);
 
-  // Update plane size when dimensions change
   useEffect(() => {
     if (meshRef.current) {
       meshRef.current.geometry.dispose();
@@ -115,31 +109,28 @@ function OverlayPlane({
   }, [width, height]);
 
   useEffect(() => {
-    if (groupRef.current) {
+    if (groupRef.current && !notified.current) {
       groupRef.current.position.set(initialPosition.x, initialPosition.y, initialPosition.z);
       sceneRef.overlayGroup = groupRef.current;
-      setReady(true);
+      onGroupReady(groupRef.current);
+      notified.current = true;
     }
     return () => { sceneRef.overlayGroup = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
-    <>
-      <group ref={groupRef} name="overlay">
-        <mesh ref={meshRef} rotation={[-Math.PI / 2, 0, 0]}>
-          <planeGeometry args={[width, height]} />
-          <meshBasicMaterial transparent side={THREE.DoubleSide} />
-        </mesh>
-      </group>
-      {ready && groupRef.current && isActive && (
-        <TransformControls object={groupRef.current} mode={mode} />
-      )}
-    </>
+    <group ref={groupRef} name="overlay">
+      {/* Flat on XZ plane, facing up */}
+      <mesh ref={meshRef} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[width, height]} />
+        <meshBasicMaterial transparent side={THREE.DoubleSide} />
+      </mesh>
+    </group>
   );
 }
 
-// ── Root group — registers itself for GLB export ──────────────
+// ── Root group — only content objects, NO helpers ─────────────
 function RootGroup({ children }: { children: React.ReactNode }) {
   const ref = useRef<THREE.Group>(null);
   useEffect(() => {
@@ -174,8 +165,12 @@ export default function SceneCanvas() {
   const overlayPosition = useBuilderStore((s) => s.overlayPosition);
   const activePanel     = useBuilderStore((s) => s.activePanel);
 
-  const modelActive   = activePanel !== "overlay";
-  const overlayActive = activePanel === "overlay";
+  // TC target objects — set when mesh groups are ready
+  const [modelGroup,   setModelGroup]   = useState<THREE.Group | null>(null);
+  const [overlayGroup, setOverlayGroup] = useState<THREE.Group | null>(null);
+
+  // Which TC is active
+  const tcTarget = activePanel === "overlay" ? overlayGroup : modelGroup;
 
   return (
     <Canvas camera={{ position: [0, 3, 5], fov: 50 }} shadows gl={{ preserveDrawingBuffer: true }} className="w-full h-full">
@@ -184,32 +179,38 @@ export default function SceneCanvas() {
       <directionalLight position={[5, 8, 5]} intensity={1.2} castShadow />
       <pointLight position={[-4, 3, -4]} intensity={0.5} color="#a78bfa" />
 
-      {/* Marker plane — visual guide only, NOT included in root group */}
+      {/* Marker guide — OUTSIDE rootGroup, never exported */}
       {markerUrl && <MarkerPlane url={markerUrl} />}
 
-      {/* Root group — EVERYTHING inside here gets baked into the final GLB */}
+      {/* ── ROOT GROUP — only objects that get baked into GLB ── */}
       <RootGroup>
         <Suspense fallback={<LoadingBox />}>
-          <DraggableModel
+          <ModelMesh
             modelUrl={modelUrl}
             scale={scale}
-            mode={transformMode}
             initialPosition={modelPosition}
-            isActive={modelActive}
+            onGroupReady={setModelGroup}
           />
         </Suspense>
 
         {overlayUrl && overlayType === "image" && (
-          <OverlayPlane
+          <OverlayMesh
             url={overlayUrl}
             width={overlayWidth}
             height={overlayHeight}
-            mode={transformMode}
             initialPosition={overlayPosition}
-            isActive={overlayActive}
+            onGroupReady={setOverlayGroup}
           />
         )}
       </RootGroup>
+
+      {/* ── TransformControls — OUTSIDE rootGroup, NEVER exported ── */}
+      {tcTarget && (
+        <TransformControls
+          object={tcTarget}
+          mode={transformMode}
+        />
+      )}
 
       <Grid args={[20, 20]} cellSize={0.5} cellThickness={0.4} cellColor="#2d2d4e" sectionColor="#4a4a7a" sectionSize={2} fadeDistance={18} infiniteGrid />
       <OrbitControls makeDefault enableDamping dampingFactor={0.08} minDistance={1} maxDistance={20} />
