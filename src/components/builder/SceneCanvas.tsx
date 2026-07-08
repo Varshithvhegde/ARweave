@@ -47,18 +47,24 @@ function ModelMesh({
   initialPosition: { x: number; y: number; z: number };
   onGroupReady: (g: THREE.Group) => void;
 }) {
-  const groupRef = useRef<THREE.Group>(null);
-  const notified = useRef(false);
+  const groupRef     = useRef<THREE.Group>(null);
+  const readyRef     = useRef(false);
+  const onReadyRef   = useRef(onGroupReady);
+  onReadyRef.current = onGroupReady;
+
+  // Apply position whenever it changes (covers both mount and API load)
+  useEffect(() => {
+    if (!groupRef.current) return;
+    groupRef.current.position.set(initialPosition.x, initialPosition.y, initialPosition.z);
+    if (!readyRef.current) {
+      sceneRef.group = groupRef.current;
+      onReadyRef.current(groupRef.current);
+      readyRef.current = true;
+    }
+  }, [initialPosition.x, initialPosition.y, initialPosition.z]);
 
   useEffect(() => {
-    if (groupRef.current && !notified.current) {
-      groupRef.current.position.set(initialPosition.x, initialPosition.y, initialPosition.z);
-      sceneRef.group = groupRef.current;
-      onGroupReady(groupRef.current);
-      notified.current = true;
-    }
     return () => { sceneRef.group = null; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -88,9 +94,11 @@ function OverlayMesh({
   initialPosition: { x: number; y: number; z: number };
   onGroupReady: (g: THREE.Group) => void;
 }) {
-  const meshRef  = useRef<THREE.Mesh>(null);
-  const groupRef = useRef<THREE.Group>(null);
-  const notified = useRef(false);
+  const meshRef      = useRef<THREE.Mesh>(null);
+  const groupRef     = useRef<THREE.Group>(null);
+  const readyRef     = useRef(false);
+  const onReadyRef   = useRef(onGroupReady);
+  onReadyRef.current = onGroupReady;
 
   useEffect(() => {
     new THREE.TextureLoader().load(url, (tex) => {
@@ -108,15 +116,19 @@ function OverlayMesh({
     }
   }, [width, height]);
 
+  // Apply position whenever it changes
   useEffect(() => {
-    if (groupRef.current && !notified.current) {
-      groupRef.current.position.set(initialPosition.x, initialPosition.y, initialPosition.z);
+    if (!groupRef.current) return;
+    groupRef.current.position.set(initialPosition.x, initialPosition.y, initialPosition.z);
+    if (!readyRef.current) {
       sceneRef.overlayGroup = groupRef.current;
-      onGroupReady(groupRef.current);
-      notified.current = true;
+      onReadyRef.current(groupRef.current);
+      readyRef.current = true;
     }
+  }, [initialPosition.x, initialPosition.y, initialPosition.z]);
+
+  useEffect(() => {
     return () => { sceneRef.overlayGroup = null; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
