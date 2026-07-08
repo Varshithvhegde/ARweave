@@ -16,7 +16,10 @@ const SceneCanvas = dynamic(() => import("./SceneCanvas"), {
 });
 
 export default function BuilderPage({ slug }: { slug: string }) {
-  const { setProjectName, setPublished, setModelFromUrl, setActivePanel, setMarkerMindUrl } = useBuilderStore();
+  const {
+    setProjectName, setPublished, setModelFromUrl,
+    setActivePanel, setMarkerMindUrl, setScale, setAnimation,
+  } = useBuilderStore();
 
   useEffect(() => {
     if (!slug || slug === "new") return;
@@ -27,15 +30,17 @@ export default function BuilderPage({ slug }: { slug: string }) {
         if (!data) return;
         setProjectName(data.name || slug);
         if (data.modelUrl) setModelFromUrl(data.modelUrl, data.name || slug);
-        // Restore marker mind URL so the Share panel shows it
         if (data.markerUrl) setMarkerMindUrl(data.markerUrl);
+        // Restore scale and animation
+        if (data.scale)     setScale(Number(data.scale));
+        if (data.animation) setAnimation(data.animation);
         if (data.status === "published" || data.modelUrl) {
           setPublished(slug);
           setActivePanel("settings");
         }
       })
       .catch(() => {});
-  }, [slug, setProjectName, setModelFromUrl, setPublished, setActivePanel, setMarkerMindUrl]);
+  }, [slug, setProjectName, setModelFromUrl, setPublished, setActivePanel, setMarkerMindUrl, setScale, setAnimation]);
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-[#0f0f1a]">
