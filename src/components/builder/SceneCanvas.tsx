@@ -80,45 +80,29 @@ function DraggableEntity({
   initialPosition: { x: number; y: number; z: number };
   onMove: (p: { x: number; y: number; z: number }) => void;
 }) {
-  const groupRef  = useRef<THREE.Group>(null);
-  const dragging  = useRef(false);
-  const lastPos   = useRef({ x: 0, y: 0, z: 0 });
+  const groupRef   = useRef<THREE.Group>(null);
+  const onMoveRef  = useRef(onMove);
+  onMoveRef.current = onMove; // always current without re-adding listeners
 
-  // Set initial position once on mount
+  // Set initial position on mount
   useEffect(() => {
     if (groupRef.current) {
       groupRef.current.position.set(initialPosition.x, initialPosition.y, initialPosition.z);
-      lastPos.current = { ...initialPosition };
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Track dragging state via DOM events on the canvas
-  useEffect(() => {
-    const onDown = () => { dragging.current = true; };
-    const onUp   = () => {
-      if (dragging.current && groupRef.current) {
-        const p = groupRef.current.position;
-        const next = {
-          x: parseFloat(p.x.toFixed(4)),
-          y: parseFloat(p.y.toFixed(4)),
-          z: parseFloat(p.z.toFixed(4)),
-        };
-        // Only call onMove if actually changed
-        if (next.x !== lastPos.current.x || next.y !== lastPos.current.y || next.z !== lastPos.current.z) {
-          lastPos.current = next;
-          onMove(next);
-        }
-      }
-      dragging.current = false;
-    };
-    window.addEventListener("pointerdown", onDown);
-    window.addEventListener("pointerup", onUp);
-    return () => {
-      window.removeEventListener("pointerdown", onDown);
-      window.removeEventListener("pointerup", onUp);
-    };
-  }, [onMove]);
+  // Every frame: read actual position from Three.js object and sync to store
+  // This is the only reliable way — TC updates the matrix, not React state
+  useFrame(() => {
+    if (!groupRef.current) return;
+    const p = groupRef.current.position;
+    // Round to 4dp to avoid floating point noise updates
+    const x = parseFloat(p.x.toFixed(4));
+    const y = parseFloat(p.y.toFixed(4));
+    const z = parseFloat(p.z.toFixed(4));
+    onMoveRef.current({ x, y, z });
+  });
 
   return (
     <TransformControls mode={mode}>
