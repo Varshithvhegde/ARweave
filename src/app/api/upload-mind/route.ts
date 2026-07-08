@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
       .from("markers")
       .upload(path, bytes, {
         contentType: "application/octet-stream",
-        upsert: false,
+        upsert: true,
         cacheControl: "31536000",
       });
 
