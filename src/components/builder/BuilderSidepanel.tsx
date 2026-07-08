@@ -54,6 +54,7 @@ export default function BuilderSidepanel({ slug: _slug }: { slug: string }) {
   const modelInputRef  = useRef<HTMLInputElement>(null);
   const [copied, setCopied]           = useState(false);
   const [compilingMarker, setCompilingMarker] = useState(false);
+  const [compileProgress, setCompileProgress] = useState(0);
 
   const effectiveBase = baseUrl.trim() || (typeof window !== "undefined" ? window.location.origin : "");
   const shareUrl = publishedSlug && effectiveBase ? `${effectiveBase}/ar/${publishedSlug}` : null;
@@ -71,31 +72,55 @@ export default function BuilderSidepanel({ slug: _slug }: { slug: string }) {
     if (!file) return;
     setMarker(file);
     setCompilingMarker(true);
-    toast.loading("Compiling marker…", { id: "marker" });
+    setCompileProgress(0);
+    toast.loading("Compiling marker… 0%", { id: "marker" });
 
     try {
-      // Dynamic import via Function to avoid TypeScript URL import error
-      // MindAR is an ES module — cannot be loaded via <script> tag
-      const mindAR = await (new Function('url', 'return import(url)')(
-        "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js"
-      ));
-      const Compiler = mindAR.Compiler ?? mindAR.default?.Compiler;
-      if (!Compiler) throw new Error("MindAR Compiler not found — check your internet connection");
+      // Draw image onto canvas to get raw pixels for the worker
+      const bitmap = await createImageBitmap(file);
+      const MAX = 1024;
+      const ratio = Math.min(MAX / bitmap.width, MAX / bitmap.height, 1);
+      const w = Math.round(bitmap.width  * ratio);
+      const h = Math.round(bitmap.height * ratio);
+      const canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext("2d")!;
+      ctx.drawImage(bitmap, 0, 0, w, h);
+      const imageData = ctx.getImageData(0, 0, w, h);
 
-      // MindAR expects an HTMLImageElement
-      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-        const el = new Image();
-        el.onload = () => resolve(el);
-        el.onerror = reject;
-        el.src = URL.createObjectURL(file);
+      // Run compilation in a Web Worker — keeps the UI responsive
+      const buffer = await new Promise<ArrayBuffer>((resolve, reject) => {
+        const worker = new Worker("/mindar-worker.js");
+
+        worker.onmessage = (ev) => {
+          const { type, buffer, progress, message } = ev.data;
+          if (type === "progress") {
+            setCompileProgress(progress);
+            toast.loading(`Compiling marker… ${progress}%`, { id: "marker" });
+          } else if (type === "done") {
+            worker.terminate();
+            resolve(buffer);
+          } else if (type === "error") {
+            worker.terminate();
+            reject(new Error(message));
+          }
+        };
+
+        worker.onerror = (err) => {
+          worker.terminate();
+          reject(new Error(err.message));
+        };
+
+        // Transfer the pixel buffer to the worker (zero-copy)
+        worker.postMessage(
+          { imageData: imageData.data.buffer, width: w, height: h },
+          [imageData.data.buffer]
+        );
       });
 
-      // Compile
-      const compiler = new (Compiler as any)();
-      await (compiler as any).compileImageTargets([img], () => {});
-      const buffer: ArrayBuffer = await (compiler as any).exportData();
+      toast.loading("Uploading…", { id: "marker" });
 
-      // Upload .mind file to server → Supabase Storage
+      // Upload compiled .mind to Supabase via server route
       const fd = new FormData();
       fd.append("mind", new File([buffer], "marker.mind", { type: "application/octet-stream" }));
       const res = await fetch("/api/upload-mind", { method: "POST", body: fd });
@@ -109,6 +134,7 @@ export default function BuilderSidepanel({ slug: _slug }: { slug: string }) {
       clearMarker();
     } finally {
       setCompilingMarker(false);
+      setCompileProgress(0);
     }
   };
 
@@ -258,10 +284,16 @@ export default function BuilderSidepanel({ slug: _slug }: { slug: string }) {
                 className="w-full border-2 border-dashed border-border rounded-xl overflow-hidden hover:border-[var(--brand)] transition-colors group disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {compilingMarker ? (
-                  <div className="p-6 flex flex-col items-center gap-2">
+                  <div className="p-6 flex flex-col items-center gap-3">
                     <Loader2 className="w-6 h-6 animate-spin text-[var(--brand)]" />
-                    <p className="text-xs text-muted-foreground">Compiling marker…</p>
-                    <p className="text-[10px] text-muted-foreground">This takes 5–15 seconds</p>
+                    <p className="text-xs text-muted-foreground font-medium">Compiling marker…</p>
+                    <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className="h-full brand-gradient transition-all duration-300"
+                        style={{ width: `${compileProgress || 5}%` }}
+                      />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">{compileProgress}% — UI stays responsive</p>
                   </div>
                 ) : markerUrl || markerMindUrl ? (
                   // Show local blob preview, or a placeholder if only mindUrl exists (after refresh)
