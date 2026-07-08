@@ -90,7 +90,7 @@ export default function BuilderSidepanel({ slug: _slug }: { slug: string }) {
 
       // Run compilation in a Web Worker — keeps the UI responsive
       const buffer = await new Promise<ArrayBuffer>((resolve, reject) => {
-        const worker = new Worker("/mindar-worker.js");
+        const worker = new Worker("/mindar-worker.js", { type: "module" });
 
         worker.onmessage = (ev) => {
           const { type, buffer, progress, message } = ev.data;
