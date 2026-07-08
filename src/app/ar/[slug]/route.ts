@@ -95,13 +95,13 @@ function buildMindARHtml({ name, modelUrl, markerUrl, scale, animTag, position }
   name: string; modelUrl: string; markerUrl: string; scale: number; animTag: string;
   position: { x: number; y: number; z: number };
 }) {
-  // Builder world: marker plane = 2 units wide
-  // MindAR world:  marker = 1 unit wide → divide by 2
-  const s = (scale * 0.1).toFixed(3);
-  // Position: builder uses 2-unit marker, MindAR uses 1-unit marker → halve x/z
-  const px = (position.x / 2).toFixed(3);
-  const py = (position.y / 2).toFixed(3);
-  const pz = (position.z / 2).toFixed(3);
+  // Builder: marker plane = 2 Three.js units wide
+  // MindAR:  marker = 1 unit wide
+  // → divide scale and position by 2 to preserve visual ratio
+  const s  = (scale    / 2).toFixed(4);
+  const px = (position.x / 2).toFixed(4);
+  const py = (position.y / 2).toFixed(4);
+  const pz = (position.z / 2).toFixed(4);
 
   return `<!DOCTYPE html>
 <html>

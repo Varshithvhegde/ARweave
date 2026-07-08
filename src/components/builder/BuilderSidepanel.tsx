@@ -242,13 +242,13 @@ export default function BuilderSidepanel({ slug: _slug }: { slug: string }) {
                 <span className="text-xs font-mono text-foreground">{scale.toFixed(1)}x</span>
               </div>
               <input
-                type="range" min={0.1} max={5} step={0.1}
+                type="range" min={0.02} max={2} step={0.01}
                 value={scale}
                 onChange={(e) => setScale(parseFloat(e.target.value))}
                 className="w-full h-1.5 accent-[var(--brand)] cursor-pointer"
               />
               <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
-                <span>0.1x</span><span>5x</span>
+                <span>tiny</span><span>large</span>
               </div>
             </div>
 

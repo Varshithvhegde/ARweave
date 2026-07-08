@@ -74,7 +74,7 @@ export const useBuilderStore = create<BuilderState>((set) => ({
   transformMode: "translate",
   setTransformMode: (mode) => set({ transformMode: mode }),
 
-  scale: 1.0,
+  scale: 0.3,
   setScale: (s) => set({ scale: s }),
   animation: "none",
   setAnimation: (a) => set({ animation: a }),
