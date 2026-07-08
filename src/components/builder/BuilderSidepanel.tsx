@@ -95,8 +95,9 @@ export default function BuilderSidepanel({ slug: _slug }: { slug: string }) {
         worker.onmessage = (ev) => {
           const { type, buffer, progress, message } = ev.data;
           if (type === "progress") {
-            setCompileProgress(progress);
-            toast.loading(`Compiling marker… ${progress}%`, { id: "marker" });
+            const pct = Math.min(99, progress);
+            setCompileProgress(pct);
+            toast.loading(`Compiling marker… ${pct}%`, { id: "marker" });
           } else if (type === "done") {
             worker.terminate();
             resolve(buffer);
