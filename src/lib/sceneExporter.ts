@@ -23,10 +23,11 @@ export function exportSceneToGLB(object: THREE.Object3D): Promise<ArrayBuffer> {
       },
       (error) => reject(error),
       {
-        binary: true,          // export as .glb not .gltf
-        embedImages: true,     // embed textures inline
-        forceIndices: true,
+        binary:            true,   // .glb not .gltf
+        embedImages:       true,   // embed textures inline
+        forceIndices:      true,
         truncateDrawRange: false,
+        trs:               true,   // export position/rotation/scale as TRS not matrix (more compatible)
       }
     );
   });

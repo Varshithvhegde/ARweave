@@ -99,9 +99,12 @@ function buildMindARHtml({ name, modelUrl, markerUrl, scale, animTag, position, 
   position: { x: number; y: number; z: number };
   overlay: { type: string; url: string | null; width: number; height: number };
 }) {
-  // If modelUrl is a baked GLB (contains "baked_"), position/scale are already embedded
-  // → use scale=1, position=0,0,0 so the baked scene renders exactly as designed
+  // Baked GLBs already have all transforms embedded — use scale=1, pos=0,0,0
+  // Builder marker plane = 2 units wide, MindAR marker = 1 unit → scale baked scene by 0.5
+  // But we DON'T need to divide again since the baked content was built against
+  // the 2-unit marker and MindAR will show it at half that automatically
   const isBaked = modelUrl.includes("baked_");
+  // For baked: scale=0.5 maps 2-unit builder space → 1-unit MindAR space
   const s  = isBaked ? "0.5"  : (scale    / 2).toFixed(4);
   const px = isBaked ? "0"    : (position.x / 2).toFixed(4);
   const py = isBaked ? "0"    : (position.y / 2).toFixed(4);
@@ -154,7 +157,7 @@ function buildMindARHtml({ name, modelUrl, markerUrl, scale, animTag, position, 
   <a-scene
     mindar-image="imageTargetSrc: ${markerUrl}; autoStart: true; uiLoading: no; uiScanning: no; uiError: no; filterMinCF: 0.001; filterBeta: 0.01; missTolerance: 5; warmupTolerance: 5;"
     color-space="sRGB"
-    renderer="colorManagement: true; physicallyCorrectLights: true;"
+    renderer="colorManagement: true; physicallyCorrectLights: false;"
     vr-mode-ui="enabled: false"
     device-orientation-permission-ui="enabled: false"
   >
@@ -164,6 +167,11 @@ function buildMindARHtml({ name, modelUrl, markerUrl, scale, animTag, position, 
         ? `<video id="overlay-vid" src="${overlay.url}" autoplay loop muted playsinline crossorigin="anonymous"></video>`
         : ""}
     </a-assets>
+
+    <!-- Lights — required for PBR materials to show correctly -->
+    <a-light type="ambient" intensity="0.8" color="#ffffff"></a-light>
+    <a-light type="directional" intensity="1.2" color="#ffffff" position="1 2 1"></a-light>
+    <a-light type="directional" intensity="0.4" color="#8080ff" position="-1 1 -1"></a-light>
 
     <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
