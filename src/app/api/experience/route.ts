@@ -19,8 +19,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "slug and modelUrl required" }, { status: 400 });
     }
 
+    const markerImageUrl = body.markerImageUrl ?? null;
+
     const sceneConfig = {
-      position: position ?? { x: 0, y: 0, z: 0 },
+      position:       position ?? { x: 0, y: 0, z: 0 },
+      markerImageUrl: markerImageUrl,
     };
 
     const config = {
@@ -76,13 +79,14 @@ export async function GET(req: NextRequest) {
   if (!error && data) {
     const sc = (data.scene_config as any) ?? {};
     return NextResponse.json({
-      slug:      data.slug,
-      name:      data.name,
-      modelUrl:  data.model_url,
-      markerUrl: data.marker_url,
-      scale:     Number(data.scale),
-      animation: data.animation_type,
-      position:  sc.position ?? { x: 0, y: 0, z: 0 },
+      slug:           data.slug,
+      name:           data.name,
+      modelUrl:       data.model_url,
+      markerUrl:      data.marker_url,
+      markerImageUrl: sc.markerImageUrl ?? null,
+      scale:          Number(data.scale),
+      animation:      data.animation_type,
+      position:       sc.position ?? { x: 0, y: 0, z: 0 },
     });
   }
 

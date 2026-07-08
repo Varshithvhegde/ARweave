@@ -14,14 +14,18 @@ interface BuilderState {
   setModelFromUrl: (url: string, name: string) => void;
   clearModel: () => void;
 
-  // Position of model relative to marker center (in MindAR units, marker width = 1)
   modelPosition: { x: number; y: number; z: number };
   setModelPosition: (pos: { x: number; y: number; z: number }) => void;
 
-  markerUrl: string | null;       // preview blob URL
-  markerFile: File | null;        // original image file
-  markerMindUrl: string | null;   // uploaded .mind file URL (for AR viewer)
+  // markerUrl     = preview (blob or Supabase image URL) — shown in builder canvas
+  // markerImageUrl = uploaded image on Supabase (persists across refresh)
+  // markerMindUrl  = compiled .mind file on Supabase (used in AR viewer)
+  markerUrl: string | null;
+  markerFile: File | null;
+  markerImageUrl: string | null;
+  markerMindUrl: string | null;
   setMarker: (file: File) => void;
+  setMarkerImageUrl: (url: string) => void;
   setMarkerMindUrl: (url: string) => void;
   clearMarker: () => void;
 
@@ -60,10 +64,12 @@ export const useBuilderStore = create<BuilderState>((set) => ({
 
   markerUrl: null,
   markerFile: null,
+  markerImageUrl: null,
   markerMindUrl: null,
-  setMarker: (file) => set({ markerFile: file, markerUrl: URL.createObjectURL(file), markerMindUrl: null }),
+  setMarker: (file) => set({ markerFile: file, markerUrl: URL.createObjectURL(file), markerImageUrl: null, markerMindUrl: null }),
+  setMarkerImageUrl: (url) => set({ markerImageUrl: url, markerUrl: url }),
   setMarkerMindUrl: (url) => set({ markerMindUrl: url }),
-  clearMarker: () => set({ markerUrl: null, markerFile: null, markerMindUrl: null }),
+  clearMarker: () => set({ markerUrl: null, markerFile: null, markerImageUrl: null, markerMindUrl: null }),
 
   transformMode: "translate",
   setTransformMode: (mode) => set({ transformMode: mode }),

@@ -18,7 +18,7 @@ const SceneCanvas = dynamic(() => import("./SceneCanvas"), {
 export default function BuilderPage({ slug }: { slug: string }) {
   const {
     setProjectName, setPublished, setModelFromUrl,
-    setActivePanel, setMarkerMindUrl, setScale, setAnimation, setModelPosition,
+    setActivePanel, setMarkerMindUrl, setMarkerImageUrl, setScale, setAnimation, setModelPosition,
   } = useBuilderStore();
 
   useEffect(() => {
@@ -30,7 +30,8 @@ export default function BuilderPage({ slug }: { slug: string }) {
         if (!data) return;
         setProjectName(data.name || slug);
         if (data.modelUrl) setModelFromUrl(data.modelUrl, data.name || slug);
-        if (data.markerUrl) setMarkerMindUrl(data.markerUrl);
+        if (data.markerUrl)      setMarkerMindUrl(data.markerUrl);
+        if (data.markerImageUrl) setMarkerImageUrl(data.markerImageUrl);
         // Restore scale and animation
         if (data.scale)     setScale(Number(data.scale));
         if (data.animation) setAnimation(data.animation);
@@ -41,7 +42,7 @@ export default function BuilderPage({ slug }: { slug: string }) {
         }
       })
       .catch(() => {});
-  }, [slug, setProjectName, setModelFromUrl, setPublished, setActivePanel, setMarkerMindUrl, setScale, setAnimation, setModelPosition]);
+  }, [slug, setProjectName, setModelFromUrl, setPublished, setActivePanel, setMarkerMindUrl, setMarkerImageUrl, setScale, setAnimation, setModelPosition]);
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-[#0f0f1a]">

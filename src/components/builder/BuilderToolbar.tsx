@@ -32,7 +32,7 @@ export default function BuilderToolbar({ slug }: { slug: string }) {
     isPublished, setPublished, publishedSlug,
     setActivePanel,
     modelUrl, modelFile,
-    markerUrl, markerFile, markerMindUrl,
+    markerUrl, markerFile, markerMindUrl, markerImageUrl,
     scale, animation, modelPosition,
     baseUrl,
   } = useBuilderStore();
@@ -76,13 +76,14 @@ export default function BuilderToolbar({ slug }: { slug: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           slug,
-          name:        projectName,
-          modelUrl:    finalModelUrl,
-          markerUrl:   finalMarkerUrl,
+          name:           projectName,
+          modelUrl:       finalModelUrl,
+          markerUrl:      finalMarkerUrl,
+          markerImageUrl: markerImageUrl ?? null,
           scale,
           animation,
-          position:    modelPosition,
-          userId:      user?.id ?? null,
+          position:       modelPosition,
+          userId:         user?.id ?? null,
         }),
       });
 

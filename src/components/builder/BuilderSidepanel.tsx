@@ -45,7 +45,7 @@ export default function BuilderSidepanel({ slug: _slug }: { slug: string }) {
     scale, setScale,
     animation, setAnimation,
     modelUrl, modelName, setModel, setModelFromUrl, clearModel,
-    markerUrl, markerMindUrl, setMarker, setMarkerMindUrl, clearMarker,
+    markerUrl, markerMindUrl, setMarker, setMarkerImageUrl, setMarkerMindUrl, clearMarker,
     isPublished, publishedSlug,
     baseUrl, setBaseUrl,
   } = useBuilderStore();
@@ -76,7 +76,17 @@ export default function BuilderSidepanel({ slug: _slug }: { slug: string }) {
     toast.loading("Compiling marker… 0%", { id: "marker" });
 
     try {
-      // Draw image onto canvas to get raw pixels for the worker
+      // 1. Upload image to Supabase immediately so it persists and shows in builder on refresh
+      const imgFd = new FormData();
+      imgFd.append("file", file);
+      imgFd.append("type", "marker");
+      const imgRes = await fetch("/api/upload", { method: "POST", body: imgFd });
+      if (imgRes.ok) {
+        const { url: imageUrl } = await imgRes.json();
+        setMarkerImageUrl(imageUrl); // updates markerUrl (canvas preview) + markerImageUrl
+      }
+
+      // 2. Draw image onto canvas to get raw pixels for the worker
       const bitmap = await createImageBitmap(file);
       const MAX = 1024;
       const ratio = Math.min(MAX / bitmap.width, MAX / bitmap.height, 1);
