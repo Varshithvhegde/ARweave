@@ -34,10 +34,20 @@ self.onmessage = async function(e) {
     });
 
     const data = await compiler.exportData();
-    // exportData may return a Uint8Array or ArrayBuffer — normalise to ArrayBuffer
-    const buffer = data instanceof ArrayBuffer ? data : data.buffer ?? new Blob([data]).arrayBuffer();
-    const finalBuffer = buffer instanceof Promise ? await buffer : buffer;
-    // Send as copy (no transfer) — avoids transferable type errors
+
+    // exportData returns a Uint8Array view — extract exactly the right bytes
+    // Using .buffer directly gives the full backing ArrayBuffer (may have extra bytes)
+    let finalBuffer;
+    if (data instanceof Uint8Array) {
+      // Slice to get only the view's bytes, not the whole backing buffer
+      finalBuffer = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+    } else if (data instanceof ArrayBuffer) {
+      finalBuffer = data;
+    } else {
+      // Fallback: copy via Blob
+      finalBuffer = await new Blob([data]).arrayBuffer();
+    }
+
     self.postMessage({ type: 'done', buffer: finalBuffer });
   } catch (err) {
     self.postMessage({ type: 'error', message: err.message || String(err) });

@@ -112,11 +112,8 @@ export default function BuilderSidepanel({ slug: _slug }: { slug: string }) {
           reject(new Error(err.message));
         };
 
-        // Transfer the pixel buffer to the worker (zero-copy)
-        worker.postMessage(
-          { imageData: imageData.data.buffer, width: w, height: h },
-          [imageData.data.buffer]
-        );
+        // Copy pixel data to worker (don't transfer — we might need imageData later)
+        worker.postMessage({ imageData: imageData.data.buffer.slice(0), width: w, height: h });
       });
 
       toast.loading("Uploading…", { id: "marker" });
