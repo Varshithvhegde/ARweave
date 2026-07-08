@@ -8,8 +8,9 @@ const supabase = createClient(
 );
 
 const BUCKET: Record<string, string> = {
-  model:  "models",
-  marker: "markers",
+  model:   "models",
+  marker:  "markers",
+  overlay: "markers", // reuse markers bucket for images/videos
 };
 
 const CONTENT_TYPE: Record<string, string> = {
@@ -19,6 +20,10 @@ const CONTENT_TYPE: Record<string, string> = {
   jpeg: "image/jpeg",
   png:  "image/png",
   webp: "image/webp",
+  avif: "image/avif",
+  mp4:  "video/mp4",
+  webm: "video/webm",
+  mov:  "video/quicktime",
 };
 
 export async function POST(req: NextRequest) {

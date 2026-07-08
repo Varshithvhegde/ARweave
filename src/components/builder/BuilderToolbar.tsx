@@ -35,6 +35,7 @@ export default function BuilderToolbar({ slug }: { slug: string }) {
     modelUrl, modelFile,
     markerUrl, markerFile, markerMindUrl, markerImageUrl,
     scale, animation,
+    overlayType, overlayStorageUrl, overlayWidth, overlayHeight,
     baseUrl,
   } = useBuilderStore();
 
@@ -89,7 +90,11 @@ export default function BuilderToolbar({ slug }: { slug: string }) {
           markerImageUrl: markerImageUrl ?? null,
           scale,
           animation,
-          position:      livePosition,
+          position:       livePosition,
+          overlayType:    overlayType,
+          overlayUrl:     overlayStorageUrl ?? null,
+          overlayWidth,
+          overlayHeight,
           userId:         user?.id ?? null,
         }),
       });

@@ -19,6 +19,7 @@ export default function BuilderPage({ slug }: { slug: string }) {
   const {
     setProjectName, setPublished, setModelFromUrl,
     setActivePanel, setMarkerMindUrl, setMarkerImageUrl, setScale, setAnimation, setModelPosition,
+    setOverlayFromUrl, setOverlayDimensions,
   } = useBuilderStore();
 
   // Don't render canvas until API data is loaded — ensures DraggableEntity
@@ -42,6 +43,10 @@ export default function BuilderPage({ slug }: { slug: string }) {
           if (data.scale)          setScale(Number(data.scale));
           if (data.animation)      setAnimation(data.animation);
           if (data.position)       setModelPosition(data.position);
+          if (data.overlay?.url) {
+            setOverlayFromUrl(data.overlay.url, data.overlay.type);
+            setOverlayDimensions(data.overlay.width ?? 1, data.overlay.height ?? 0.75);
+          }
           if (data.status === "published" || data.modelUrl) {
             setPublished(slug);
             setActivePanel("settings");
@@ -50,7 +55,7 @@ export default function BuilderPage({ slug }: { slug: string }) {
       })
       .catch(() => {})
       .finally(() => setDataLoaded(true));
-  }, [slug, setProjectName, setModelFromUrl, setPublished, setActivePanel, setMarkerMindUrl, setMarkerImageUrl, setScale, setAnimation, setModelPosition]);
+  }, [slug, setProjectName, setModelFromUrl, setPublished, setActivePanel, setMarkerMindUrl, setMarkerImageUrl, setScale, setAnimation, setModelPosition, setOverlayFromUrl, setOverlayDimensions]);
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-[#0f0f1a]">

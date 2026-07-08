@@ -24,6 +24,7 @@ export async function GET(
   let animation = "spin";
   let name = slug;
   let position = { x: 0, y: 0, z: 0 };
+  let overlay: { type: string; url: string | null; width: number; height: number } = { type: "none", url: null, width: 1, height: 0.75 };
 
   const { data } = await supabase
     .from("experiences")
@@ -39,6 +40,7 @@ export async function GET(
     animation = data.animation_type ?? "spin";
     const sc  = ((data as any).scene_config as any) ?? {};
     position  = sc.position ?? { x: 0, y: 0, z: 0 };
+    if (sc.overlay?.url) overlay = sc.overlay;
   } else {
     // 2. Fall back to local file cache
     const cached = getExperience(slug);
@@ -49,6 +51,7 @@ export async function GET(
       scale     = Number(cached.scale) || 1;
       animation = cached.animation ?? "spin";
       position  = cached.sceneConfig?.position ?? { x: 0, y: 0, z: 0 };
+      if ((cached.sceneConfig as any)?.overlay?.url) overlay = (cached.sceneConfig as any).overlay;
     }
   }
 
@@ -82,7 +85,7 @@ export async function GET(
 
   // Use MindAR for .mind files, AR.js for Hiro
   const html = isMind
-    ? buildMindARHtml({ name, modelUrl, markerUrl: markerUrl!, scale, animTag, position })
+    ? buildMindARHtml({ name, modelUrl, markerUrl: markerUrl!, scale, animTag, position, overlay })
     : buildARJsHtml({ name, modelUrl, scale: s, animTag });
 
   return new NextResponse(html, {
@@ -91,9 +94,10 @@ export async function GET(
   });
 }
 
-function buildMindARHtml({ name, modelUrl, markerUrl, scale, animTag, position }: {
+function buildMindARHtml({ name, modelUrl, markerUrl, scale, animTag, position, overlay }: {
   name: string; modelUrl: string; markerUrl: string; scale: number; animTag: string;
   position: { x: number; y: number; z: number };
+  overlay: { type: string; url: string | null; width: number; height: number };
 }) {
   // Builder: marker plane = 2 Three.js units wide
   // MindAR:  marker = 1 unit wide
@@ -156,11 +160,15 @@ function buildMindARHtml({ name, modelUrl, markerUrl, scale, animTag, position }
   >
     <a-assets timeout="30000">
       <a-asset-item id="model" src="${modelUrl}"></a-asset-item>
+      ${overlay.type === "video" && overlay.url
+        ? `<video id="overlay-vid" src="${overlay.url}" autoplay loop muted playsinline crossorigin="anonymous"></video>`
+        : ""}
     </a-assets>
 
     <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
     <a-entity mindar-image-target="targetIndex: 0" id="target">
+      <!-- 3D model -->
       <a-entity
         gltf-model="#model"
         position="${px} ${py} ${pz}"
@@ -168,6 +176,28 @@ function buildMindARHtml({ name, modelUrl, markerUrl, scale, animTag, position }
         rotation="0 0 0"
         ${animTag}
       ></a-entity>
+
+      ${overlay.type === "image" && overlay.url
+        ? `<!-- 2D image overlay -->
+      <a-image
+        src="${overlay.url}"
+        width="${overlay.width}"
+        height="${overlay.height}"
+        position="0 0 0.001"
+        rotation="0 0 0"
+      ></a-image>`
+        : ""}
+
+      ${overlay.type === "video" && overlay.url
+        ? `<!-- Video overlay -->
+      <a-video
+        src="#overlay-vid"
+        width="${overlay.width}"
+        height="${overlay.height}"
+        position="0 0 0.001"
+        rotation="0 0 0"
+      ></a-video>`
+        : ""}
     </a-entity>
   </a-scene>
 

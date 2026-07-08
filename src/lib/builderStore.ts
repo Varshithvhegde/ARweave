@@ -2,6 +2,7 @@ import { create } from "zustand";
 
 export type TransformMode = "translate" | "rotate" | "scale";
 export type AnimationType = "none" | "spin" | "float" | "pulse";
+export type OverlayType   = "none" | "image" | "video";
 
 interface BuilderState {
   projectName: string;
@@ -17,9 +18,6 @@ interface BuilderState {
   modelPosition: { x: number; y: number; z: number };
   setModelPosition: (pos: { x: number; y: number; z: number }) => void;
 
-  // markerUrl     = preview (blob or Supabase image URL) — shown in builder canvas
-  // markerImageUrl = uploaded image on Supabase (persists across refresh)
-  // markerMindUrl  = compiled .mind file on Supabase (used in AR viewer)
   markerUrl: string | null;
   markerFile: File | null;
   markerImageUrl: string | null;
@@ -28,6 +26,18 @@ interface BuilderState {
   setMarkerImageUrl: (url: string) => void;
   setMarkerMindUrl: (url: string) => void;
   clearMarker: () => void;
+
+  // 2D/video overlay
+  overlayType: OverlayType;
+  overlayUrl: string | null;        // blob preview
+  overlayStorageUrl: string | null; // Supabase URL
+  overlayWidth: number;
+  overlayHeight: number;
+  setOverlay: (file: File) => void;
+  setOverlayStorageUrl: (url: string) => void;
+  setOverlayDimensions: (w: number, h: number) => void;
+  setOverlayFromUrl: (url: string, type: OverlayType) => void;
+  clearOverlay: () => void;
 
   transformMode: TransformMode;
   setTransformMode: (mode: TransformMode) => void;
@@ -44,8 +54,8 @@ interface BuilderState {
   baseUrl: string;
   setBaseUrl: (url: string) => void;
 
-  activePanel: "model" | "marker" | "settings";
-  setActivePanel: (p: "model" | "marker" | "settings") => void;
+  activePanel: "model" | "marker" | "overlay" | "settings";
+  setActivePanel: (p: "model" | "marker" | "overlay" | "settings") => void;
 }
 
 export const useBuilderStore = create<BuilderState>((set) => ({
@@ -70,6 +80,21 @@ export const useBuilderStore = create<BuilderState>((set) => ({
   setMarkerImageUrl: (url) => set({ markerImageUrl: url, markerUrl: url }),
   setMarkerMindUrl: (url) => set({ markerMindUrl: url }),
   clearMarker: () => set({ markerUrl: null, markerFile: null, markerImageUrl: null, markerMindUrl: null }),
+
+  overlayType: "none",
+  overlayUrl: null,
+  overlayStorageUrl: null,
+  overlayWidth: 1,
+  overlayHeight: 0.75,
+  setOverlay: (file) => set({
+    overlayType: file.type.startsWith("video") ? "video" : "image",
+    overlayUrl: URL.createObjectURL(file),
+    overlayStorageUrl: null,
+  }),
+  setOverlayStorageUrl: (url) => set({ overlayStorageUrl: url }),
+  setOverlayDimensions: (w, h) => set({ overlayWidth: w, overlayHeight: h }),
+  setOverlayFromUrl: (url, type) => set({ overlayStorageUrl: url, overlayUrl: url, overlayType: type }),
+  clearOverlay: () => set({ overlayType: "none", overlayUrl: null, overlayStorageUrl: null }),
 
   transformMode: "translate",
   setTransformMode: (mode) => set({ transformMode: mode }),

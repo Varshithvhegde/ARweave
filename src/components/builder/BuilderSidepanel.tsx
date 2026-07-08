@@ -1,6 +1,6 @@
 "use client";
 import { useRef, useState } from "react";
-import { Upload, Box, Scan, Settings2, QrCode, Copy, Check, Loader2, X } from "lucide-react";
+import { Upload, Box, Scan, Settings2, QrCode, Copy, Check, Loader2, X, Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
@@ -46,15 +46,19 @@ export default function BuilderSidepanel({ slug: _slug }: { slug: string }) {
     animation, setAnimation,
     modelUrl, modelName, setModel, setModelFromUrl, clearModel,
     markerUrl, markerMindUrl, setMarker, setMarkerImageUrl, setMarkerMindUrl, clearMarker,
+    overlayType, overlayUrl, overlayStorageUrl, overlayWidth, overlayHeight,
+    setOverlay, setOverlayStorageUrl, setOverlayDimensions, clearOverlay,
     isPublished, publishedSlug,
     baseUrl, setBaseUrl,
   } = useBuilderStore();
 
-  const markerInputRef = useRef<HTMLInputElement>(null);
-  const modelInputRef  = useRef<HTMLInputElement>(null);
-  const [copied, setCopied]           = useState(false);
+  const markerInputRef  = useRef<HTMLInputElement>(null);
+  const modelInputRef   = useRef<HTMLInputElement>(null);
+  const overlayInputRef = useRef<HTMLInputElement>(null);
+  const [copied, setCopied]                   = useState(false);
   const [compilingMarker, setCompilingMarker] = useState(false);
   const [compileProgress, setCompileProgress] = useState(0);
+  const [uploadingOverlay, setUploadingOverlay] = useState(false);
 
   const effectiveBase = baseUrl.trim() || (typeof window !== "undefined" ? window.location.origin : "");
   const shareUrl = publishedSlug && effectiveBase ? `${effectiveBase}/ar/${publishedSlug}` : null;
@@ -153,6 +157,38 @@ export default function BuilderSidepanel({ slug: _slug }: { slug: string }) {
     toast.success(`Model "${file.name}" loaded!`);
   };
 
+  const handleOverlayUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setOverlay(file);
+    setUploadingOverlay(true);
+    toast.loading("Uploading overlay…", { id: "overlay" });
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("type", "overlay");
+      const res = await fetch("/api/upload", { method: "POST", body: fd });
+      if (!res.ok) throw new Error("Upload failed");
+      const { url } = await res.json();
+      setOverlayStorageUrl(url);
+      // Auto-set aspect ratio from image
+      if (file.type.startsWith("image")) {
+        const img = new window.Image();
+        img.onload = () => {
+          const ratio = img.naturalHeight / img.naturalWidth;
+          setOverlayDimensions(1, parseFloat(ratio.toFixed(3)));
+        };
+        img.src = URL.createObjectURL(file);
+      }
+      toast.success("Overlay ready!", { id: "overlay" });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Upload failed", { id: "overlay" });
+      clearOverlay();
+    } finally {
+      setUploadingOverlay(false);
+    }
+  };
+
   const handleFreeModel = (m: typeof FREE_MODELS[0]) => {
     setModelFromUrl(m.url, m.name);
     toast.success(`${m.icon} ${m.name} loaded!`);
@@ -167,6 +203,9 @@ export default function BuilderSidepanel({ slug: _slug }: { slug: string }) {
         </Tab>
         <Tab active={activePanel === "marker"}   onClick={() => setActivePanel("marker")}>
           <Scan className="w-3 h-3 inline mr-1" />Marker
+        </Tab>
+        <Tab active={activePanel === "overlay"}  onClick={() => setActivePanel("overlay")}>
+          <ImageIcon className="w-3 h-3 inline mr-1" />Overlay
         </Tab>
         <Tab active={activePanel === "settings"} onClick={() => setActivePanel("settings")}>
           <Settings2 className="w-3 h-3 inline mr-1" />Share
@@ -373,6 +412,109 @@ export default function BuilderSidepanel({ slug: _slug }: { slug: string }) {
                 </a>
               </div>
             )}
+          </>
+        )}
+
+        {/* ── OVERLAY PANEL ── */}
+        {activePanel === "overlay" && (
+          <>
+            <div>
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2 block">
+                Image or video overlay
+              </Label>
+              <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
+                Place a 2D image or video flat on top of your marker. Great for logos, photos, product shots, or promo videos.
+              </p>
+
+              <input
+                ref={overlayInputRef}
+                type="file"
+                accept="image/*,video/mp4,video/webm"
+                className="hidden"
+                onChange={handleOverlayUpload}
+                disabled={uploadingOverlay}
+              />
+
+              <button
+                onClick={() => !uploadingOverlay && overlayInputRef.current?.click()}
+                disabled={uploadingOverlay}
+                className="w-full border-2 border-dashed border-border rounded-xl overflow-hidden hover:border-[var(--brand)] transition-colors group disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {uploadingOverlay ? (
+                  <div className="p-5 flex flex-col items-center gap-2">
+                    <Loader2 className="w-5 h-5 animate-spin text-[var(--brand)]" />
+                    <p className="text-xs text-muted-foreground">Uploading…</p>
+                  </div>
+                ) : overlayUrl && overlayType === "image" ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={overlayUrl} alt="Overlay preview" className="w-full h-32 object-contain bg-muted/40 p-2" />
+                ) : overlayType === "video" ? (
+                  <div className="p-5 flex flex-col items-center gap-2">
+                    <div className="w-10 h-10 rounded-xl bg-blue-500/15 flex items-center justify-center">
+                      <span className="text-xl">🎬</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground font-medium">Video overlay ready</p>
+                  </div>
+                ) : (
+                  <div className="p-5 text-center">
+                    <ImageIcon className="w-6 h-6 mx-auto text-muted-foreground group-hover:text-[var(--brand)] mb-2 transition-colors" />
+                    <p className="text-xs text-muted-foreground group-hover:text-foreground">
+                      Upload image or video<br />JPG · PNG · WebP · MP4
+                    </p>
+                  </div>
+                )}
+              </button>
+
+              {overlayStorageUrl && (
+                <div className="flex gap-2 mt-2">
+                  <div className="flex items-center gap-1.5 flex-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5">
+                    <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                    <span className="text-xs text-emerald-600 font-medium">
+                      {overlayType === "video" ? "Video" : "Image"} uploaded ✓
+                    </span>
+                  </div>
+                  <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => overlayInputRef.current?.click()}>Change</Button>
+                  <Button variant="ghost" size="sm" className="text-xs h-8 text-destructive hover:text-destructive" onClick={clearOverlay}>✕</Button>
+                </div>
+              )}
+            </div>
+
+            <Separator />
+
+            <div className="space-y-3">
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Width</Label>
+                  <span className="text-xs font-mono">{overlayWidth.toFixed(2)}</span>
+                </div>
+                <input
+                  type="range" min={0.1} max={3} step={0.05}
+                  value={overlayWidth}
+                  onChange={(e) => setOverlayDimensions(parseFloat(e.target.value), overlayHeight)}
+                  className="w-full h-1.5 accent-[var(--brand)] cursor-pointer"
+                />
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Height</Label>
+                  <span className="text-xs font-mono">{overlayHeight.toFixed(2)}</span>
+                </div>
+                <input
+                  type="range" min={0.1} max={3} step={0.05}
+                  value={overlayHeight}
+                  onChange={(e) => setOverlayDimensions(overlayWidth, parseFloat(e.target.value))}
+                  className="w-full h-1.5 accent-[var(--brand)] cursor-pointer"
+                />
+              </div>
+            </div>
+
+            <div className="rounded-xl bg-muted/60 border border-border p-3 space-y-1.5">
+              <p className="text-xs font-semibold text-foreground">Tips</p>
+              <p className="text-xs text-muted-foreground">• Image floats flat on the marker</p>
+              <p className="text-xs text-muted-foreground">• Use PNG with transparency for logos</p>
+              <p className="text-xs text-muted-foreground">• Video loops automatically</p>
+              <p className="text-xs text-muted-foreground">• Can combine with 3D model</p>
+            </div>
           </>
         )}
 

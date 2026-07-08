@@ -14,16 +14,20 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { slug, name, modelUrl, markerUrl, scale, animation, position, userId } = body;
+    const markerImageUrl = body.markerImageUrl ?? null;
+    const overlayType    = body.overlayType    ?? "none";
+    const overlayUrl     = body.overlayUrl     ?? null;
+    const overlayWidth   = Number(body.overlayWidth)  || 1;
+    const overlayHeight  = Number(body.overlayHeight) || 0.75;
 
     if (!slug || !modelUrl) {
       return NextResponse.json({ error: "slug and modelUrl required" }, { status: 400 });
     }
 
-    const markerImageUrl = body.markerImageUrl ?? null;
-
     const sceneConfig = {
       position:       position ?? { x: 0, y: 0, z: 0 },
-      markerImageUrl: markerImageUrl,
+      markerImageUrl,
+      overlay: { type: overlayType, url: overlayUrl, width: overlayWidth, height: overlayHeight },
     };
 
     const config = {
@@ -37,10 +41,8 @@ export async function POST(req: NextRequest) {
       createdAt: new Date().toISOString(),
     };
 
-    // Always save to local file cache (works without auth)
     saveExperience(config);
 
-    // Also persist to Supabase if we have a userId
     if (userId) {
       await supabase.from("experiences").upsert({
         user_id:        userId,
@@ -50,6 +52,8 @@ export async function POST(req: NextRequest) {
         marker_url:     config.markerUrl,
         scale:          config.scale,
         animation_type: config.animation,
+        overlay_type:   overlayType,
+        overlay_url:    overlayUrl,
         status:         "published",
         scene_config:   sceneConfig,
       }, { onConflict: "user_id,slug" });
@@ -86,7 +90,8 @@ export async function GET(req: NextRequest) {
       markerImageUrl: sc.markerImageUrl ?? null,
       scale:          Number(data.scale),
       animation:      data.animation_type,
-      position:       sc.position ?? { x: 0, y: 0, z: 0 },
+      position:       sc.position    ?? { x: 0, y: 0, z: 0 },
+      overlay:        sc.overlay     ?? { type: "none", url: null, width: 1, height: 0.75 },
     });
   }
 
