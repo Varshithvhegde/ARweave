@@ -99,13 +99,13 @@ function buildMindARHtml({ name, modelUrl, markerUrl, scale, animTag, position, 
   position: { x: number; y: number; z: number };
   overlay: { type: string; url: string | null; width: number; height: number };
 }) {
-  // Builder: marker plane = 2 Three.js units wide
-  // MindAR:  marker = 1 unit wide
-  // → divide scale and position by 2 to preserve visual ratio
-  const s  = (scale    / 2).toFixed(4);
-  const px = (position.x / 2).toFixed(4);
-  const py = (position.y / 2).toFixed(4);
-  const pz = (position.z / 2).toFixed(4);
+  // If modelUrl is a baked GLB (contains "baked_"), position/scale are already embedded
+  // → use scale=1, position=0,0,0 so the baked scene renders exactly as designed
+  const isBaked = modelUrl.includes("baked_");
+  const s  = isBaked ? "0.5"  : (scale    / 2).toFixed(4);
+  const px = isBaked ? "0"    : (position.x / 2).toFixed(4);
+  const py = isBaked ? "0"    : (position.y / 2).toFixed(4);
+  const pz = isBaked ? "0"    : (position.z / 2).toFixed(4);
 
   return `<!DOCTYPE html>
 <html>

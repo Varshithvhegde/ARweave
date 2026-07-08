@@ -6,6 +6,7 @@ import { Separator } from "@/components/ui/separator";
 import { useBuilderStore, type TransformMode } from "@/lib/builderStore";
 import { createClient } from "@/lib/supabase/client";
 import { sceneRef } from "@/lib/sceneRef";
+import { exportSceneToGLB } from "@/lib/sceneExporter";
 import Link from "next/link";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -15,6 +16,16 @@ const MODES: { mode: TransformMode; icon: React.FC<{ className?: string }>; labe
   { mode: "rotate",    icon: RotateCcw, label: "Rotate" },
   { mode: "scale",     icon: Maximize2, label: "Scale" },
 ];
+
+async function uploadBuffer(buffer: ArrayBuffer, filename: string, contentType: string): Promise<string> {
+  const fd = new FormData();
+  fd.append("file", new File([buffer], filename, { type: contentType }));
+  fd.append("type", "model");
+  const res = await fetch("/api/upload", { method: "POST", body: fd });
+  if (!res.ok) throw new Error("Upload failed");
+  const { url } = await res.json();
+  return url;
+}
 
 async function uploadFile(file: File, type: "model" | "marker"): Promise<string> {
   const fd = new FormData();
@@ -32,55 +43,49 @@ export default function BuilderToolbar({ slug }: { slug: string }) {
     projectName, setProjectName,
     isPublished, setPublished, publishedSlug,
     setActivePanel,
-    modelUrl, modelFile,
-    markerUrl, markerFile, markerMindUrl, markerImageUrl,
-    scale, animation,
-    overlayType, overlayStorageUrl, overlayWidth, overlayHeight,
-    baseUrl,
+    markerFile, markerMindUrl, markerImageUrl,
+    animation, baseUrl,
   } = useBuilderStore();
 
   const [publishing, setPublishing] = useState(false);
+  const [publishStep, setPublishStep] = useState("");
 
   const handlePublish = async () => {
-    if (!modelUrl) { toast.error("Add a 3D model first"); return; }
+    if (!sceneRef.rootGroup) { toast.error("Scene not ready yet"); return; }
     setPublishing(true);
-
-    // The base that the phone will use to fetch assets
     const origin = baseUrl.trim() || window.location.origin;
 
     try {
-      // Upload model file if it was a local upload (has a File object)
-      let finalModelUrl = modelUrl;
-      if (modelFile) {
-        toast.loading("Uploading model…", { id: "publish" });
-        const path = await uploadFile(modelFile, "model");
-        // Make absolute so the phone can fetch it via ngrok
-        finalModelUrl = path.startsWith("http") ? path : `${origin}${path}`;
-      }
+      // ── Step 1: Bake the entire scene to a single GLB ──────────────
+      setPublishStep("Baking scene to GLB…");
+      toast.loading("Baking scene to GLB…", { id: "publish" });
 
-      // Use the compiled .mind URL if available, otherwise upload raw image
+      const glbBuffer = await exportSceneToGLB(sceneRef.rootGroup);
+
+      // ── Step 2: Upload baked GLB ───────────────────────────────────
+      setPublishStep("Uploading baked model…");
+      toast.loading("Uploading baked model…", { id: "publish" });
+
+      const bakedModelUrl = await uploadBuffer(
+        glbBuffer,
+        `baked_${slug}_${Date.now()}.glb`,
+        "model/gltf-binary"
+      );
+      const finalModelUrl = bakedModelUrl.startsWith("http") ? bakedModelUrl : `${origin}${bakedModelUrl}`;
+
+      // ── Step 3: Upload marker if needed ────────────────────────────
       let finalMarkerUrl: string | null = markerMindUrl ?? null;
       if (!finalMarkerUrl && markerFile) {
+        setPublishStep("Uploading marker…");
         toast.loading("Uploading marker…", { id: "publish" });
         const path = await uploadFile(markerFile, "marker");
         finalMarkerUrl = path.startsWith("http") ? path : `${origin}${path}`;
       }
 
-      // Use the route slug (already created in DB) — not derived from project name
-      // Read live positions directly from Three.js groups at publish time
-      const g = sceneRef.group;
-      const livePosition = g
-        ? { x: parseFloat(g.position.x.toFixed(4)), y: parseFloat(g.position.y.toFixed(4)), z: parseFloat(g.position.z.toFixed(4)) }
-        : { x: 0, y: 0, z: 0 };
+      // ── Step 4: Save to DB ─────────────────────────────────────────
+      setPublishStep("Saving…");
+      toast.loading("Saving…", { id: "publish" });
 
-      const og = sceneRef.overlayGroup;
-      const liveOverlayPosition = og
-        ? { x: parseFloat(og.position.x.toFixed(4)), y: parseFloat(og.position.y.toFixed(4)), z: parseFloat(og.position.z.toFixed(4)) }
-        : { x: 0, y: 0.01, z: 0 };
-
-      toast.loading("Publishing…", { id: "publish" });
-
-      // Get current user id if logged in
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
 
@@ -90,17 +95,17 @@ export default function BuilderToolbar({ slug }: { slug: string }) {
         body: JSON.stringify({
           slug,
           name:           projectName,
-          modelUrl:       finalModelUrl,
+          modelUrl:       finalModelUrl,  // this is now the BAKED GLB
           markerUrl:      finalMarkerUrl,
           markerImageUrl: markerImageUrl ?? null,
-          scale,
+          scale:          1,              // scale is baked in — always 1 in AR viewer
           animation,
-          position:       livePosition,
-          overlayType:     overlayType,
-          overlayUrl:      overlayStorageUrl ?? null,
-          overlayWidth,
-          overlayHeight,
-          overlayPosition: liveOverlayPosition,
+          position:       { x: 0, y: 0, z: 0 }, // position is baked in — always 0 in AR viewer
+          overlayType:    "none",         // overlay is baked in — no separate overlay in AR viewer
+          overlayUrl:     null,
+          overlayWidth:   1,
+          overlayHeight:  0.75,
+          overlayPosition: { x: 0, y: 0, z: 0 },
           userId:         user?.id ?? null,
         }),
       });
@@ -111,12 +116,13 @@ export default function BuilderToolbar({ slug }: { slug: string }) {
       setActivePanel("settings");
       toast.success("Published!", {
         id: "publish",
-        description: "Scan the QR on your phone to test AR",
+        description: "Scene baked to single GLB · Scan the QR to test",
       });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Publish failed", { id: "publish" });
     } finally {
       setPublishing(false);
+      setPublishStep("");
     }
   };
 
@@ -173,11 +179,12 @@ export default function BuilderToolbar({ slug }: { slug: string }) {
         <Button
           size="sm"
           onClick={handlePublish}
-          disabled={publishing || !modelUrl}
+          disabled={publishing}
           className="brand-gradient text-white border-0 hover:opacity-90 gap-1.5 h-8 text-xs font-semibold disabled:opacity-50"
+          title={publishing ? publishStep : ""}
         >
           {publishing
-            ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Publishing…</>
+            ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />{publishStep || "Publishing…"}</>
             : <><Globe className="w-3.5 h-3.5" />{isPublished ? "Update" : "Publish"}</>
           }
         </Button>
