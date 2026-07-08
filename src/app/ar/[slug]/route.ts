@@ -27,7 +27,7 @@ export async function GET(
 
   const { data } = await supabase
     .from("experiences")
-    .select("name, model_url, marker_url, scale, animation_type")
+    .select("name, model_url, marker_url, scale, animation_type, scene_config")
     .eq("slug", slug)
     .single();
 
