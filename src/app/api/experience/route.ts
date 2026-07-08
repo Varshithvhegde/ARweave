@@ -15,10 +15,11 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { slug, name, modelUrl, markerUrl, scale, animation, position, userId } = body;
     const markerImageUrl = body.markerImageUrl ?? null;
-    const overlayType    = body.overlayType    ?? "none";
-    const overlayUrl     = body.overlayUrl     ?? null;
-    const overlayWidth   = Number(body.overlayWidth)  || 1;
-    const overlayHeight  = Number(body.overlayHeight) || 0.75;
+    const overlayType     = body.overlayType     ?? "none";
+    const overlayUrl      = body.overlayUrl      ?? null;
+    const overlayWidth    = Number(body.overlayWidth)  || 1;
+    const overlayHeight   = Number(body.overlayHeight) || 0.75;
+    const overlayPosition = body.overlayPosition ?? { x: 0, y: 0.01, z: 0 };
 
     if (!slug || !modelUrl) {
       return NextResponse.json({ error: "slug and modelUrl required" }, { status: 400 });
@@ -27,7 +28,7 @@ export async function POST(req: NextRequest) {
     const sceneConfig = {
       position:       position ?? { x: 0, y: 0, z: 0 },
       markerImageUrl,
-      overlay: { type: overlayType, url: overlayUrl, width: overlayWidth, height: overlayHeight },
+      overlay: { type: overlayType, url: overlayUrl, width: overlayWidth, height: overlayHeight, position: overlayPosition },
     };
 
     const config = {

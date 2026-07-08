@@ -33,9 +33,11 @@ interface BuilderState {
   overlayStorageUrl: string | null; // Supabase URL
   overlayWidth: number;
   overlayHeight: number;
+  overlayPosition: { x: number; y: number; z: number };
   setOverlay: (file: File) => void;
   setOverlayStorageUrl: (url: string) => void;
   setOverlayDimensions: (w: number, h: number) => void;
+  setOverlayPosition: (pos: { x: number; y: number; z: number }) => void;
   setOverlayFromUrl: (url: string, type: OverlayType) => void;
   clearOverlay: () => void;
 
@@ -86,6 +88,8 @@ export const useBuilderStore = create<BuilderState>((set) => ({
   overlayStorageUrl: null,
   overlayWidth: 1,
   overlayHeight: 0.75,
+  overlayPosition: { x: 0, y: 0.01, z: 0 },
+  setOverlayPosition: (pos) => set({ overlayPosition: pos }),
   setOverlay: (file) => set({
     overlayType: file.type.startsWith("video") ? "video" : "image",
     overlayUrl: URL.createObjectURL(file),
@@ -94,7 +98,7 @@ export const useBuilderStore = create<BuilderState>((set) => ({
   setOverlayStorageUrl: (url) => set({ overlayStorageUrl: url }),
   setOverlayDimensions: (w, h) => set({ overlayWidth: w, overlayHeight: h }),
   setOverlayFromUrl: (url, type) => set({ overlayStorageUrl: url, overlayUrl: url, overlayType: type }),
-  clearOverlay: () => set({ overlayType: "none", overlayUrl: null, overlayStorageUrl: null }),
+  clearOverlay: () => set({ overlayType: "none", overlayUrl: null, overlayStorageUrl: null, overlayPosition: { x: 0, y: 0.01, z: 0 } }),
 
   transformMode: "translate",
   setTransformMode: (mode) => set({ transformMode: mode }),

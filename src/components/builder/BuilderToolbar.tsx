@@ -67,11 +67,16 @@ export default function BuilderToolbar({ slug }: { slug: string }) {
       }
 
       // Use the route slug (already created in DB) — not derived from project name
-      // Read live position directly from Three.js group — bypasses all React state issues
+      // Read live positions directly from Three.js groups at publish time
       const g = sceneRef.group;
       const livePosition = g
         ? { x: parseFloat(g.position.x.toFixed(4)), y: parseFloat(g.position.y.toFixed(4)), z: parseFloat(g.position.z.toFixed(4)) }
         : { x: 0, y: 0, z: 0 };
+
+      const og = sceneRef.overlayGroup;
+      const liveOverlayPosition = og
+        ? { x: parseFloat(og.position.x.toFixed(4)), y: parseFloat(og.position.y.toFixed(4)), z: parseFloat(og.position.z.toFixed(4)) }
+        : { x: 0, y: 0.01, z: 0 };
 
       toast.loading("Publishing…", { id: "publish" });
 
@@ -91,10 +96,11 @@ export default function BuilderToolbar({ slug }: { slug: string }) {
           scale,
           animation,
           position:       livePosition,
-          overlayType:    overlayType,
-          overlayUrl:     overlayStorageUrl ?? null,
+          overlayType:     overlayType,
+          overlayUrl:      overlayStorageUrl ?? null,
           overlayWidth,
           overlayHeight,
+          overlayPosition: liveOverlayPosition,
           userId:         user?.id ?? null,
         }),
       });

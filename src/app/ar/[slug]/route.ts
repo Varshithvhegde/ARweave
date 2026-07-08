@@ -177,27 +177,32 @@ function buildMindARHtml({ name, modelUrl, markerUrl, scale, animTag, position, 
         ${animTag}
       ></a-entity>
 
-      ${overlay.type === "image" && overlay.url
-        ? `<!-- 2D image overlay -->
+      ${overlay.type === "image" && overlay.url ? (() => {
+        const op = (overlay as any).position ?? { x: 0, y: 0.01, z: 0 };
+        const ox = (op.x / 2).toFixed(4);
+        const oy = (op.y / 2).toFixed(4);
+        const oz = (op.z / 2).toFixed(4);
+        return `<!-- 2D image overlay -->
       <a-image
         src="${overlay.url}"
-        width="${overlay.width}"
-        height="${overlay.height}"
-        position="0 0 0.001"
+        width="${(overlay.width / 2).toFixed(3)}"
+        height="${(overlay.height / 2).toFixed(3)}"
+        position="${ox} ${oy} ${oz}"
         rotation="0 0 0"
-      ></a-image>`
-        : ""}
+      ></a-image>`;
+      })() : ""}
 
-      ${overlay.type === "video" && overlay.url
-        ? `<!-- Video overlay -->
+      ${overlay.type === "video" && overlay.url ? (() => {
+        const op = (overlay as any).position ?? { x: 0, y: 0.01, z: 0 };
+        return `<!-- Video overlay -->
       <a-video
         src="#overlay-vid"
-        width="${overlay.width}"
-        height="${overlay.height}"
-        position="0 0 0.001"
+        width="${(overlay.width / 2).toFixed(3)}"
+        height="${(overlay.height / 2).toFixed(3)}"
+        position="${(op.x/2).toFixed(4)} ${(op.y/2).toFixed(4)} ${(op.z/2).toFixed(4)}"
         rotation="0 0 0"
-      ></a-video>`
-        : ""}
+      ></a-video>`;
+      })() : ""}
     </a-entity>
   </a-scene>
 
