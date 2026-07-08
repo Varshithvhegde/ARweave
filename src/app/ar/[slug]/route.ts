@@ -23,6 +23,7 @@ export async function GET(
   let scale = 1;
   let animation = "spin";
   let name = slug;
+  let position = { x: 0, y: 0, z: 0 };
 
   const { data } = await supabase
     .from("experiences")
@@ -36,6 +37,8 @@ export async function GET(
     markerUrl = data.marker_url;
     scale     = Number(data.scale) || 1;
     animation = data.animation_type ?? "spin";
+    const sc  = ((data as any).scene_config as any) ?? {};
+    position  = sc.position ?? { x: 0, y: 0, z: 0 };
   } else {
     // 2. Fall back to local file cache
     const cached = getExperience(slug);
@@ -45,6 +48,7 @@ export async function GET(
       markerUrl = cached.markerUrl;
       scale     = Number(cached.scale) || 1;
       animation = cached.animation ?? "spin";
+      position  = cached.sceneConfig?.position ?? { x: 0, y: 0, z: 0 };
     }
   }
 
@@ -78,7 +82,7 @@ export async function GET(
 
   // Use MindAR for .mind files, AR.js for Hiro
   const html = isMind
-    ? buildMindARHtml({ name, modelUrl, markerUrl: markerUrl!, scale, animTag })
+    ? buildMindARHtml({ name, modelUrl, markerUrl: markerUrl!, scale, animTag, position })
     : buildARJsHtml({ name, modelUrl, scale: s, animTag });
 
   return new NextResponse(html, {
@@ -87,13 +91,17 @@ export async function GET(
   });
 }
 
-function buildMindARHtml({ name, modelUrl, markerUrl, scale, animTag }: {
+function buildMindARHtml({ name, modelUrl, markerUrl, scale, animTag, position }: {
   name: string; modelUrl: string; markerUrl: string; scale: number; animTag: string;
+  position: { x: number; y: number; z: number };
 }) {
-  // MindAR coordinate system: marker width = 1 unit
-  // A scale of 1 from the builder = model fills the marker = 0.1 in MindAR units
-  // User slider goes 0.1x – 5x, map that to 0.01 – 0.5 in MindAR space
+  // Builder world: marker plane = 2 units wide
+  // MindAR world:  marker = 1 unit wide → divide by 2
   const s = (scale * 0.1).toFixed(3);
+  // Position: builder uses 2-unit marker, MindAR uses 1-unit marker → halve x/z
+  const px = (position.x / 2).toFixed(3);
+  const py = (position.y / 2).toFixed(3);
+  const pz = (position.z / 2).toFixed(3);
 
   return `<!DOCTYPE html>
 <html>
@@ -155,7 +163,7 @@ function buildMindARHtml({ name, modelUrl, markerUrl, scale, animTag }: {
     <a-entity mindar-image-target="targetIndex: 0" id="target">
       <a-entity
         gltf-model="#model"
-        position="0 0 0"
+        position="${px} ${py} ${pz}"
         scale="${s} ${s} ${s}"
         rotation="0 0 0"
         ${animTag}

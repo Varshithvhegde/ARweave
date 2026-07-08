@@ -33,7 +33,7 @@ export default function BuilderToolbar({ slug }: { slug: string }) {
     setActivePanel,
     modelUrl, modelFile,
     markerUrl, markerFile, markerMindUrl,
-    scale, animation,
+    scale, animation, modelPosition,
     baseUrl,
   } = useBuilderStore();
 
@@ -76,12 +76,13 @@ export default function BuilderToolbar({ slug }: { slug: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           slug,
-          name:      projectName,
-          modelUrl:  finalModelUrl,
-          markerUrl: finalMarkerUrl,
+          name:        projectName,
+          modelUrl:    finalModelUrl,
+          markerUrl:   finalMarkerUrl,
           scale,
           animation,
-          userId:    user?.id ?? null,
+          position:    modelPosition,
+          userId:      user?.id ?? null,
         }),
       });
 

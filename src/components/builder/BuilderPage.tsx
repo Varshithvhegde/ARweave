@@ -18,7 +18,7 @@ const SceneCanvas = dynamic(() => import("./SceneCanvas"), {
 export default function BuilderPage({ slug }: { slug: string }) {
   const {
     setProjectName, setPublished, setModelFromUrl,
-    setActivePanel, setMarkerMindUrl, setScale, setAnimation,
+    setActivePanel, setMarkerMindUrl, setScale, setAnimation, setModelPosition,
   } = useBuilderStore();
 
   useEffect(() => {
@@ -34,13 +34,14 @@ export default function BuilderPage({ slug }: { slug: string }) {
         // Restore scale and animation
         if (data.scale)     setScale(Number(data.scale));
         if (data.animation) setAnimation(data.animation);
+        if (data.position)  setModelPosition(data.position);
         if (data.status === "published" || data.modelUrl) {
           setPublished(slug);
           setActivePanel("settings");
         }
       })
       .catch(() => {});
-  }, [slug, setProjectName, setModelFromUrl, setPublished, setActivePanel, setMarkerMindUrl, setScale, setAnimation]);
+  }, [slug, setProjectName, setModelFromUrl, setPublished, setActivePanel, setMarkerMindUrl, setScale, setAnimation, setModelPosition]);
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-[#0f0f1a]">

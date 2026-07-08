@@ -9,6 +9,7 @@ export type ExperienceConfig = {
   markerUrl: string | null;
   scale: number;
   animation: string;
+  sceneConfig?: { position?: { x: number; y: number; z: number } };
   createdAt: string;
 };
 

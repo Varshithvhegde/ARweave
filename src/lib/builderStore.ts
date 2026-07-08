@@ -14,6 +14,10 @@ interface BuilderState {
   setModelFromUrl: (url: string, name: string) => void;
   clearModel: () => void;
 
+  // Position of model relative to marker center (in MindAR units, marker width = 1)
+  modelPosition: { x: number; y: number; z: number };
+  setModelPosition: (pos: { x: number; y: number; z: number }) => void;
+
   markerUrl: string | null;       // preview blob URL
   markerFile: File | null;        // original image file
   markerMindUrl: string | null;   // uploaded .mind file URL (for AR viewer)
@@ -50,6 +54,9 @@ export const useBuilderStore = create<BuilderState>((set) => ({
   setModel: (file) => set({ modelFile: file, modelUrl: URL.createObjectURL(file), modelName: file.name }),
   setModelFromUrl: (url, name) => set({ modelUrl: url, modelFile: null, modelName: name }),
   clearModel: () => set({ modelUrl: null, modelFile: null, modelName: null }),
+
+  modelPosition: { x: 0, y: 0, z: 0 },
+  setModelPosition: (pos) => set({ modelPosition: pos }),
 
   markerUrl: null,
   markerFile: null,

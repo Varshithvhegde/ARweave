@@ -13,19 +13,24 @@ const DUCK = "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { slug, name, modelUrl, markerUrl, scale, animation, userId } = body;
+    const { slug, name, modelUrl, markerUrl, scale, animation, position, userId } = body;
 
     if (!slug || !modelUrl) {
       return NextResponse.json({ error: "slug and modelUrl required" }, { status: 400 });
     }
 
+    const sceneConfig = {
+      position: position ?? { x: 0, y: 0, z: 0 },
+    };
+
     const config = {
       slug,
-      name: name || slug,
+      name:      name || slug,
       modelUrl,
       markerUrl: markerUrl || null,
       scale:     Number(scale) || 1,
       animation: animation || "none",
+      sceneConfig,
       createdAt: new Date().toISOString(),
     };
 
@@ -43,7 +48,7 @@ export async function POST(req: NextRequest) {
         scale:          config.scale,
         animation_type: config.animation,
         status:         "published",
-        scene_config:   {},
+        scene_config:   sceneConfig,
       }, { onConflict: "user_id,slug" });
       // Non-fatal — local cache is the fallback
     }
@@ -69,6 +74,7 @@ export async function GET(req: NextRequest) {
     .single();
 
   if (!error && data) {
+    const sc = (data.scene_config as any) ?? {};
     return NextResponse.json({
       slug:      data.slug,
       name:      data.name,
@@ -76,6 +82,7 @@ export async function GET(req: NextRequest) {
       markerUrl: data.marker_url,
       scale:     Number(data.scale),
       animation: data.animation_type,
+      position:  sc.position ?? { x: 0, y: 0, z: 0 },
     });
   }
 
