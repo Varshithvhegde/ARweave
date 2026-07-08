@@ -74,47 +74,13 @@ export default function BuilderSidepanel({ slug: _slug }: { slug: string }) {
     toast.loading("Compiling marker…", { id: "marker" });
 
     try {
-      // Poll until MINDAR.IMAGE.Compiler is available (WASM init is async)
-      const waitForCompiler = (timeoutMs = 15000): Promise<new () => unknown> =>
-        new Promise((resolve, reject) => {
-          const start = Date.now();
-          const check = () => {
-            const C = (window as any).MINDAR?.IMAGE?.Compiler;
-            if (C) { resolve(C); return; }
-            if (Date.now() - start > timeoutMs) { reject(new Error("MindAR WASM timed out — check your connection and try again")); return; }
-            setTimeout(check, 100);
-          };
-          check();
-        });
-
-      // Load script if not already loaded
-      if (!(window as any).MINDAR?.IMAGE?.Compiler) {
-        await new Promise<void>((resolve, reject) => {
-          // Try both possible CDN paths
-          const urls = [
-            "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js",
-            "https://cdn.jsdelivr.net/npm/@hiukim/mind-ar-js@1.2.5/dist/mindar-image.prod.js",
-          ];
-          let tried = 0;
-          const tryLoad = (url: string) => {
-            const existing = document.querySelector(`script[data-mindar]`);
-            if (existing) existing.remove();
-            const s = document.createElement("script");
-            s.src = url;
-            s.setAttribute("data-mindar", "1");
-            s.onload = () => resolve();
-            s.onerror = () => {
-              tried++;
-              if (tried < urls.length) tryLoad(urls[tried]);
-              else reject(new Error("Failed to load MindAR from CDN"));
-            };
-            document.head.appendChild(s);
-          };
-          tryLoad(urls[0]);
-        });
-      }
-
-      const Compiler = await waitForCompiler(15000);
+      // Dynamic import via Function to avoid TypeScript URL import error
+      // MindAR is an ES module — cannot be loaded via <script> tag
+      const mindAR = await (new Function('url', 'return import(url)')(
+        "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js"
+      ));
+      const Compiler = mindAR.Compiler ?? mindAR.default?.Compiler;
+      if (!Compiler) throw new Error("MindAR Compiler not found — check your internet connection");
 
       // Convert file to ImageData
       const bitmap = await createImageBitmap(file);
