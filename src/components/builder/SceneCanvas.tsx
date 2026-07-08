@@ -80,40 +80,48 @@ function DraggableEntity({
   initialPosition: { x: number; y: number; z: number };
   onMove: (p: { x: number; y: number; z: number }) => void;
 }) {
-  const groupRef = useRef<THREE.Group>(null);
-  const tcRef    = useRef<any>(null);
+  const groupRef  = useRef<THREE.Group>(null);
+  const dragging  = useRef(false);
+  const lastPos   = useRef({ x: 0, y: 0, z: 0 });
 
   // Set initial position once on mount
   useEffect(() => {
     if (groupRef.current) {
       groupRef.current.position.set(initialPosition.x, initialPosition.y, initialPosition.z);
+      lastPos.current = { ...initialPosition };
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Listen to the TC's internal "mouseUp" event to capture final position
+  // Track dragging state via DOM events on the canvas
   useEffect(() => {
-    const tc = tcRef.current;
-    if (!tc) return;
-
-    const save = () => {
-      if (!groupRef.current) return;
-      const p = groupRef.current.position;
-      const r = groupRef.current.rotation;
-      const s = groupRef.current.scale;
-      onMove({
-        x: parseFloat(p.x.toFixed(4)),
-        y: parseFloat(p.y.toFixed(4)),
-        z: parseFloat(p.z.toFixed(4)),
-      });
+    const onDown = () => { dragging.current = true; };
+    const onUp   = () => {
+      if (dragging.current && groupRef.current) {
+        const p = groupRef.current.position;
+        const next = {
+          x: parseFloat(p.x.toFixed(4)),
+          y: parseFloat(p.y.toFixed(4)),
+          z: parseFloat(p.z.toFixed(4)),
+        };
+        // Only call onMove if actually changed
+        if (next.x !== lastPos.current.x || next.y !== lastPos.current.y || next.z !== lastPos.current.z) {
+          lastPos.current = next;
+          onMove(next);
+        }
+      }
+      dragging.current = false;
     };
-
-    tc.addEventListener("mouseUp", save);
-    return () => tc.removeEventListener("mouseUp", save);
+    window.addEventListener("pointerdown", onDown);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("pointerup", onUp);
+    };
   }, [onMove]);
 
   return (
-    <TransformControls ref={tcRef} mode={mode}>
+    <TransformControls mode={mode}>
       <group ref={groupRef}>
         <Suspense fallback={null}>
           {modelUrl
