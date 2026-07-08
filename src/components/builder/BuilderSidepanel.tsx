@@ -263,9 +263,20 @@ export default function BuilderSidepanel({ slug: _slug }: { slug: string }) {
                     <p className="text-xs text-muted-foreground">Compiling marker…</p>
                     <p className="text-[10px] text-muted-foreground">This takes 5–15 seconds</p>
                   </div>
-                ) : markerUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={markerUrl} alt="Marker preview" className="w-full h-36 object-cover" />
+                ) : markerUrl || markerMindUrl ? (
+                  // Show local blob preview, or a placeholder if only mindUrl exists (after refresh)
+                  markerUrl
+                    // eslint-disable-next-line @next/next/no-img-element
+                    ? <img src={markerUrl} alt="Marker preview" className="w-full h-36 object-cover" />
+                    : (
+                      <div className="p-5 flex flex-col items-center gap-2">
+                        <div className="w-10 h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center">
+                          <Scan className="w-5 h-5 text-emerald-500" />
+                        </div>
+                        <p className="text-xs text-emerald-600 font-medium">Marker compiled ✓</p>
+                        <p className="text-[10px] text-muted-foreground">Tap to replace</p>
+                      </div>
+                    )
                 ) : (
                   <div className="p-5 text-center">
                     <Scan className="w-6 h-6 mx-auto text-muted-foreground group-hover:text-[var(--brand)] mb-2 transition-colors" />
@@ -276,7 +287,7 @@ export default function BuilderSidepanel({ slug: _slug }: { slug: string }) {
                 )}
               </button>
 
-              {markerUrl && !compilingMarker && (
+              {(markerUrl || markerMindUrl) && !compilingMarker && (
                 <div className="flex gap-2 mt-2">
                   <div className={cn(
                     "flex items-center gap-1.5 flex-1 rounded-lg px-3 py-1.5 border",

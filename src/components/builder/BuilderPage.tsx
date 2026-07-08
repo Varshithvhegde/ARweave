@@ -16,9 +16,8 @@ const SceneCanvas = dynamic(() => import("./SceneCanvas"), {
 });
 
 export default function BuilderPage({ slug }: { slug: string }) {
-  const { setProjectName, setPublished, setModelFromUrl, setActivePanel } = useBuilderStore();
+  const { setProjectName, setPublished, setModelFromUrl, setActivePanel, setMarkerMindUrl } = useBuilderStore();
 
-  // Load existing experience config if slug exists in API
   useEffect(() => {
     if (!slug || slug === "new") return;
 
@@ -28,14 +27,15 @@ export default function BuilderPage({ slug }: { slug: string }) {
         if (!data) return;
         setProjectName(data.name || slug);
         if (data.modelUrl) setModelFromUrl(data.modelUrl, data.name || slug);
-        // Mark as published if it was already published
+        // Restore marker mind URL so the Share panel shows it
+        if (data.markerUrl) setMarkerMindUrl(data.markerUrl);
         if (data.status === "published" || data.modelUrl) {
           setPublished(slug);
           setActivePanel("settings");
         }
       })
       .catch(() => {});
-  }, [slug, setProjectName, setModelFromUrl, setPublished, setActivePanel]);
+  }, [slug, setProjectName, setModelFromUrl, setPublished, setActivePanel, setMarkerMindUrl]);
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-[#0f0f1a]">
