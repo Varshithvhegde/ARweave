@@ -81,29 +81,39 @@ function DraggableEntity({
   onMove: (p: { x: number; y: number; z: number }) => void;
 }) {
   const groupRef = useRef<THREE.Group>(null);
+  const tcRef    = useRef<any>(null);
 
   // Set initial position once on mount
   useEffect(() => {
     if (groupRef.current) {
       groupRef.current.position.set(initialPosition.x, initialPosition.y, initialPosition.z);
     }
-    // only on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleChange = () => {
-    if (!groupRef.current) return;
-    const p = groupRef.current.position;
-    onMove({
-      x: parseFloat(p.x.toFixed(3)),
-      y: parseFloat(p.y.toFixed(3)),
-      z: parseFloat(p.z.toFixed(3)),
-    });
-  };
+  // Listen to the TC's internal "mouseUp" event to capture final position
+  useEffect(() => {
+    const tc = tcRef.current;
+    if (!tc) return;
+
+    const save = () => {
+      if (!groupRef.current) return;
+      const p = groupRef.current.position;
+      const r = groupRef.current.rotation;
+      const s = groupRef.current.scale;
+      onMove({
+        x: parseFloat(p.x.toFixed(4)),
+        y: parseFloat(p.y.toFixed(4)),
+        z: parseFloat(p.z.toFixed(4)),
+      });
+    };
+
+    tc.addEventListener("mouseUp", save);
+    return () => tc.removeEventListener("mouseUp", save);
+  }, [onMove]);
 
   return (
-    // TransformControls wrapping children directly — no object prop needed
-    <TransformControls mode={mode} onMouseUp={handleChange}>
+    <TransformControls ref={tcRef} mode={mode}>
       <group ref={groupRef}>
         <Suspense fallback={null}>
           {modelUrl
@@ -172,6 +182,7 @@ export default function SceneCanvas() {
         infiniteGrid
       />
 
+      {/* makeDefault lets TransformControls disable orbit when dragging */}
       <OrbitControls makeDefault enableDamping dampingFactor={0.08} minDistance={1} maxDistance={20} />
     </Canvas>
   );
